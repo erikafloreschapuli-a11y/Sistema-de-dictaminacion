@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mi expediente - Dictaminacion UTP 2026</title>
+  <style>
+    <?!= include('estilos') ?>
+    <?!= include('Estudiante/estudianteStyle') ?>
+  </style>
+</head>
+<body>
+  <header class="cabecera">
+    <div class="cabecera-contenido">
+      <div>
+        <p class="cabecera-institucion">Universidad Tecnologica de Puebla</p>
+        <h1>Mi expediente - Nuevo ingreso 2026</h1>
+      </div>
+      <div class="cabecera-usuario">
+        <span class="cabecera-nombre" id="nombre-cabecera"><?= usuario.nombre ?></span>
+        <span class="etiqueta-rol"><?= usuario.rol ?></span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="menu" aria-label="Secciones del panel">
+    <button type="button" class="menu-boton activo" data-seccion="datos">Mis datos</button>
+    <button type="button" class="menu-boton" data-seccion="documentos">Mis documentos</button>
+  </nav>
+
+  <main class="contenedor">
+
+    <!-- RF-07 y RF-08: datos del estudiante -->
+    <section id="seccion-datos" class="seccion">
+      <h2 class="seccion-titulo">Mis datos <span class="rf">RF-07</span></h2>
+
+      <div class="panel">
+        <div class="datos-grid" id="datos-estudiante">
+          <p class="cargando">Cargando datos...</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Actualizar datos de contacto <span class="rf">RF-08</span></h3>
+        <form id="form-datos" class="formulario">
+          <label class="campo">Telefono
+            <input type="tel" id="campo-telefono" maxlength="20" placeholder="2221234567">
+          </label>
+          <label class="campo">Correo personal
+            <input type="email" id="campo-correo-personal" maxlength="120" placeholder="correo@ejemplo.com">
+          </label>
+          <div class="formulario-acciones">
+            <button type="submit" class="boton" id="boton-guardar-datos">Guardar cambios</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- RF-09 a RF-14: carga y seguimiento de documentos -->
+    <section id="seccion-documentos" class="seccion" hidden>
+      <h2 class="seccion-titulo">Mis documentos <span class="rf">RF-09 a RF-14</span></h2>
+      <p class="resumen-expediente" id="resumen-expediente">Cargando...</p>
+      <div class="documentos-grid" id="contenedor-documentos">
+        <p class="cargando">Cargando documentos...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="aviso-global" class="aviso" hidden></div>
+
+  
+    <?!= include('scripts') ?>
+  
+  <script>
+    // Estado del panel: datos y configuracion vigentes en el servidor.
+    const estadoPagina = {
+      estudiante: null,
+      documentos: [],
+      configuracion: null,
+      cargando: false
+    };
+
+    const CLASE_ESTATUS = {
+      'Pendiente': 'estado-pendiente',
+      'En Revision': 'estado-revision',
+      'Aprobado': 'estado-aprobado',
+      'Observado': 'estado-observado'
+    };
+
+    const BORDE_ESTATUS = {
+      'Pendiente': 'borde-pendiente',
+      'En Revision': 'borde-revision',
+      'Aprobado': 'borde-aprobado',
+      'Observado': 'borde-observado'
+    };
+
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.menu-boton').forEach(function (boton) {
+        boton.addEventListener('click', function () {
+          cambiarSeccion(boton.dataset.seccion);
+        });
+      });
+
+      document.getElementById('form-datos').addEventListener('submit', actualizarDatos);
+      document.getElementById('contenedor-documentos').addEventListener('click', manejarAccionDocumento);
+
+      cargarExpediente();
+    });
+
+    /* ---------------- Navegacion por secciones ---------------- */
+
+    function cambiarSeccion(nombre) {
+      document.querySelectorAll('.menu-boton').forEach(function (boton) {
+        boton.classList.toggle('activo', boton.dataset.seccion === nombre);
+      });
+      document.querySelectorAll('.seccion').forEach(function (seccion) {
+        seccion.hidden = seccion.id !== 'seccion-' + nombre;
+      });
+    }
+
+    /* ---------------- RF-07: consulta del expediente ---------------- */
+
+    async function cargarExpediente() {
+      if (estadoPagina.cargando) {
+        return;
+      }
+      estadoPagina.cargando = true;
+      document.getElementById('contenedor-documentos').innerHTML = '<p class="cargando">Cargando documentos...</p>';
+      try {
+        const respuesta = await api('apiObtenerMiExpediente');
+        estadoPagina.estudiante = respuesta.estudiante;
+        estadoPagina.documentos = respuesta.documentos;
+        estadoPagina.configuracion = respuesta.configuracion;
+        renderDatos();
+        renderDocumentos();
+      } catch (error) {
+        const mensaje = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+        document.getElementById('datos-estudiante').innerHTML = mensaje;
+        document.getElementById('contenedor-documentos').innerHTML = mensaje;
+        mostrarAviso(error.message, 'error');
+      } finally {
+        estadoPagina.cargando = false;
+      }
+    }
+
+    function renderDatos() {
+      const estudiante = estadoPagina.estudiante;
+      document.getElementById('nombre-cabecera').textContent = estudiante.nombre || 'Estudiante';
+      document.getElementById('datos-estudiante').innerHTML = [
+        crearDato('Nombre', estudiante.nombre),
+        crearDato('Matricula', estudiante.matricula),
+        crearDato('Carrera', estudiante.carrera),
+        crearDato('Generacion', estudiante.generacion),
+        crearDato('Correo institucional', estudiante.correo_institucional),
+        crearDato('Estatus general', estudiante.estatus_general)
+      ].join('');
+      document.getElementById('campo-telefono').value = estudiante.telefono || '';
+      document.getElementById('campo-correo-personal').value = estudiante.correo_personal || '';
+    }
+
+    function crearDato(etiqueta, valor) {
+      const texto = valor === undefined || valor === null || valor === '' ? 'Sin definir' : valor;
+      return '<div class="dato">' +
+        '<p class="dato-etiqueta">' + escapeHtml(etiqueta) + '</p>' +
+        '<p class="dato-valor">' + escapeHtml(texto) + '</p>' +
+        '</div>';
+    }
+
+    /* ---------------- RF-08: actualizacion de contacto ---------------- */
+
+    async function actualizarDatos(evento) {
+      evento.preventDefault();
+      const boton = document.getElementById('boton-guardar-datos');
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiActualizarMisDatos', {
+          telefono: document.getElementById('campo-telefono').value,
+          correoPersonal: document.getElementById('campo-correo-personal').value
+        });
+        estadoPagina.estudiante = respuesta.estudiante;
+        renderDatos();
+        mostrarAviso(
+          respuesta.sinCambios ? 'No habia cambios por guardar.' : 'Datos actualizados correctamente.',
+          'ok'
+        );
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+
+    /* ---------------- RF-09 a RF-14: documentos ---------------- */
+
+    function renderDocumentos() {
+      const contenedor = document.getElementById('contenedor-documentos');
+      const documentos = estadoPagina.documentos || [];
+      const aprobados = documentos.filter(function (documento) {
+        return documento.estatus === 'Aprobado';
+      }).length;
+
+      document.getElementById('resumen-expediente').textContent =
+        'Documentos aprobados: ' + aprobados + ' de ' + documentos.length + '.';
+
+      if (!documentos.length) {
+        contenedor.innerHTML = '<p class="vacio">No hay documentos configurados.</p>';
+        return;
+      }
+      contenedor.innerHTML = documentos.map(renderDocumento).join('');
+    }
+
+    function renderDocumento(documento) {
+      const claseEstado = CLASE_ESTATUS[documento.estatus] || 'estado-pendiente';
+      const claseBorde = BORDE_ESTATUS[documento.estatus] || 'borde-pendiente';
+      const archivo = documento.url_archivo
+        ? '<p class="documento-meta"><a href="' + escapeHtml(documento.url_archivo) + '" target="_blank" rel="noopener">Ver archivo cargado</a></p>'
+        : '';
+      const carga = documento.fecha_carga
+        ? '<p class="documento-meta">Cargado: ' + escapeHtml(formatearFechaHora(documento.fecha_carga)) + '</p>'
+        : '<p class="documento-meta">Aun no has cargado este documento.</p>';
+      const dictamen = documento.fecha_dictamen
+        ? '<p class="documento-meta">Dictaminado: ' + escapeHtml(formatearFechaHora(documento.fecha_dictamen)) +
+          (documento.dictaminador ? ' por ' + escapeHtml(documento.dictaminador) : '') + '</p>'
+        : '';
+      const observacion = documento.observaciones
+        ? '<div class="documento-observacion"><strong>Observacion del dictaminador</strong>' + escapeHtml(documento.observaciones) + '</div>'
+        : '';
+      const aceptar = (estadoPagina.configuracion && estadoPagina.configuracion.tiposPermitidos
+        ? estadoPagina.configuracion.tiposPermitidos
+        : ['PDF', 'JPG', 'PNG']).map(function (tipo) {
+          return '.' + String(tipo).toLowerCase();
+        }).join(',');
+      const acciones = documento.puedeCargar
+        ? '<input type="file" class="documento-archivo" data-tipo="' + escapeHtml(documento.tipo_documento) + '" accept="' + escapeHtml(aceptar) + '">' +
+          '<button type="button" class="boton boton-mini" data-accion="subir" data-tipo="' + escapeHtml(documento.tipo_documento) + '">' +
+          (documento.estatus === 'Observado' ? 'Volver a subir' : 'Subir documento') +
+          '</button>'
+        : '<span class="nota-bloqueo">' + escapeHtml(documento.motivoBloqueo || 'No disponible para carga.') + '</span>';
+
+      return '<article class="documento-tarjeta ' + claseBorde + '">' +
+        '<div class="documento-cabecera">' +
+          '<h3>' + escapeHtml(documento.tipo_documento) + '</h3>' +
+          '<span class="estado ' + claseEstado + '">' + escapeHtml(documento.estatus) + '</span>' +
+        '</div>' +
+        archivo + carga + dictamen + observacion +
+        '<div class="documento-acciones">' + acciones + '</div>' +
+        '</article>';
+    }
+
+    function manejarAccionDocumento(evento) {
+      const boton = evento.target.closest('button[data-accion="subir"]');
+      if (boton) {
+        subirDocumento(boton);
+      }
+    }
+
+    async function subirDocumento(boton) {
+      const tarjeta = boton.closest('.documento-tarjeta');
+      const entrada = tarjeta ? tarjeta.querySelector('.documento-archivo') : null;
+      const tipoDocumento = boton.dataset.tipo;
+
+      if (!entrada || !entrada.files || !entrada.files.length) {
+        mostrarAviso('Selecciona un archivo antes de subirlo.', 'error');
+        return;
+      }
+
+      const archivo = entrada.files[0];
+      const errorValidacion = validarArchivoCliente(archivo);
+      if (errorValidacion) {
+        mostrarAviso(errorValidacion, 'error');
+        entrada.value = '';
+        return;
+      }
+
+      marcarCargando(boton, true);
+      try {
+        const contenidoBase64 = await leerArchivoBase64(archivo);
+        await api('apiSubirDocumento', {
+          tipoDocumento: tipoDocumento,
+          nombreArchivo: archivo.name,
+          tipoMime: archivo.type,
+          contenidoBase64: contenidoBase64
+        });
+        mostrarAviso('Documento "' + tipoDocumento + '" cargado. Estatus: En Revision.', 'ok');
+        entrada.value = '';
+        await cargarExpediente();
+        cambiarSeccion('documentos');
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+        marcarCargando(boton, false);
+      }
+    }
+
+    function validarArchivoCliente(archivo) {
+      const configuracion = estadoPagina.configuracion || {};
+      const tiposPermitidos = configuracion.tiposPermitidos || ['PDF', 'JPG', 'PNG'];
+      const tamanoMaximoMb = Number(configuracion.tamanoMaximoMb) || 5;
+      const extension = obtenerExtension(archivo.name);
+
+      if (!archivo.size) {
+        return 'El archivo esta vacio.';
+      }
+      if (tiposPermitidos.indexOf(extension) === -1) {
+        return 'Formato no permitido. Solo se aceptan: ' + tiposPermitidos.join(', ') + '.';
+      }
+      if (archivo.size > tamanoMaximoMb * 1024 * 1024) {
+        return 'El archivo supera el tamano maximo de ' + tamanoMaximoMb + ' MB.';
+      }
+      return '';
+    }
+
+    function obtenerExtension(nombreArchivo) {
+      const partes = String(nombreArchivo || '').split('.');
+      return partes.length < 2 ? '' : partes.pop().trim().toUpperCase();
+    }
+
+    function leerArchivoBase64(archivo) {
+      return new Promise(function (resolver, rechazar) {
+        const lector = new FileReader();
+        lector.onload = function () {
+          const resultado = String(lector.result || '');
+          const coma = resultado.indexOf(',');
+          resolver(coma >= 0 ? resultado.slice(coma + 1) : resultado);
+        };
+        lector.onerror = function () {
+          rechazar(new Error('No se pudo leer el archivo seleccionado.'));
+        };
+        lector.readAsDataURL(archivo);
+      });
+    }
+  </script>
+</body>
+</html>

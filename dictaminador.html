@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dictaminacion de expedientes - UTP 2026</title>
+  <style>
+    <?!= include('estilos') ?>
+    <?!= include('Dictaminador/dictaminadorStyle') ?>
+  </style>
+</head>
+<body>
+  <header class="cabecera">
+    <div class="cabecera-contenido">
+      <div>
+        <p class="cabecera-institucion">Universidad Tecnologica de Puebla</p>
+        <h1>Dictaminacion de expedientes - Nuevo ingreso 2026</h1>
+      </div>
+      <div class="cabecera-usuario">
+        <span class="cabecera-nombre"><?= usuario.nombre ?></span>
+        <span class="etiqueta-rol"><?= usuario.rol ?></span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="menu" aria-label="Secciones del panel">
+    <button type="button" class="menu-boton activo" data-seccion="expedientes">Expedientes</button>
+    <? if (usuario.rol === 'Administrador') { ?>
+      <a class="menu-boton menu-enlace" href="?panel=administrador" target="_top">Volver a administracion</a>
+    <? } ?>
+  </nav>
+
+  <main class="contenedor">
+    <!-- RF-15 a RF-21: revision y dictamen de documentos -->
+    <section id="seccion-expedientes" class="seccion">
+      <h2 class="seccion-titulo">Expedientes para dictamen <span class="rf">RF-15 a RF-21</span></h2>
+
+      <form id="form-filtros" class="panel filtros">
+        <label class="campo">Buscar matricula o nombre
+          <input type="search" id="filtro-texto" maxlength="120" placeholder="Ej. 2026-0001 o nombre">
+        </label>
+        <label class="campo">Carrera
+          <select id="filtro-carrera">
+            <option value="">Todas las carreras</option>
+          </select>
+        </label>
+        <label class="campo">Estatus
+          <select id="filtro-estatus">
+            <option value="En Revision" selected>En revision</option>
+            <option value="">Todos</option>
+            <option value="Pendiente">Pendiente</option>
+            <option value="Observado">Observado</option>
+            <option value="Completo">Completo</option>
+          </select>
+        </label>
+        <div class="formulario-acciones">
+          <button type="submit" class="boton" id="boton-buscar">Buscar</button>
+          <button type="button" class="boton boton-secundario" id="boton-limpiar-filtros">Limpiar</button>
+        </div>
+      </form>
+
+      <div class="dictamen-layout">
+        <div class="dictamen-lista">
+          <p class="total-expedientes" id="total-expedientes"></p>
+          <div class="tabla-contenedor">
+            <table>
+              <thead>
+                <tr>
+                  <th>Estudiante</th>
+                  <th>Carrera</th>
+                  <th>Estatus</th>
+                  <th>Documentos</th>
+                  <th>Accion</th>
+                </tr>
+              </thead>
+              <tbody id="cuerpo-expedientes">
+                <tr><td colspan="5" class="cargando">Cargando expedientes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- RF-17: documento visible a un lado y acciones al otro -->
+        <aside class="dictamen-detalle panel" id="detalle-expediente">
+          <p class="vacio">Selecciona un expediente para revisar sus documentos.</p>
+        </aside>
+      </div>
+    </section>
+  </main> 
+
+  <div id="aviso-global" class="aviso" hidden></div>
+
+  
+    <?!= include('scripts') ?>
+  
+  <script>
+    // Estado del panel: lista filtrada y expediente abierto.
+    const estadoPagina = {
+      expedientes: [],
+      carreras: [],
+      expedienteActual: null,
+      matriculaActual: '',
+      documentoSeleccionado: '',
+      cargando: false
+    };
+
+    const CLASE_ESTATUS = {
+      'Pendiente': 'estado-pendiente',
+      'En Revision': 'estado-revision',
+      'Aprobado': 'estado-aprobado',
+      'Observado': 'estado-observado',
+      'Completo': 'estado-aprobado'
+    };
+
+    const ESTATUS_OBSERVADO = 'Observado';
+    const ESTATUS_APROBADO = 'Aprobado';
+
+    document.addEventListener('DOMContentLoaded', function () {
+      document.getElementById('form-filtros').addEventListener('submit', function (evento) {
+        evento.preventDefault();
+        cargarExpedientes();
+      });
+      document.getElementById('boton-limpiar-filtros').addEventListener('click', limpiarFiltros);
+      document.getElementById('cuerpo-expedientes').addEventListener('click', manejarTabla);
+      document.getElementById('detalle-expediente').addEventListener('click', manejarDetalle);
+
+      cargarExpedientes();
+    });
+
+    /* ---------------- RF-15 y RF-16: lista y filtros ---------------- */
+
+    function obtenerFiltros() {
+      return {
+        texto: document.getElementById('filtro-texto').value,
+        carrera: document.getElementById('filtro-carrera').value,
+        estatus: document.getElementById('filtro-estatus').value
+      };
+    }
+
+    function limpiarFiltros() {
+      document.getElementById('filtro-texto').value = '';
+      document.getElementById('filtro-carrera').value = '';
+      document.getElementById('filtro-estatus').value = 'En Revision';
+      cargarExpedientes();
+    }
+
+    async function cargarExpedientes(mostrarCargando) {
+      if (estadoPagina.cargando) {
+        return;
+      }
+      estadoPagina.cargando = true;
+      const cuerpo = document.getElementById('cuerpo-expedientes');
+      if (mostrarCargando !== false) {
+        cuerpo.innerHTML = '<tr><td colspan="5" class="cargando">Cargando expedientes...</td></tr>';
+      }
+      try {
+        const respuesta = await api('apiObtenerExpedientesDictaminador', obtenerFiltros());
+        estadoPagina.expedientes = respuesta.expedientes || [];
+        estadoPagina.carreras = respuesta.carreras || [];
+        renderCarreras();
+        renderTabla();
+      } catch (error) {
+        cuerpo.innerHTML = '<tr><td colspan="5" class="resultado-error">' + escapeHtml(error.message) + '</td></tr>';
+        mostrarAviso(error.message, 'error');
+      } finally {
+        estadoPagina.cargando = false;
+      }
+    }
+
+    function renderCarreras() {
+      const select = document.getElementById('filtro-carrera');
+      const seleccionada = select.value;
+      const opciones = ['<option value="">Todas las carreras</option>'];
+      estadoPagina.carreras.forEach(function (carrera) {
+        opciones.push('<option value="' + escapeHtml(carrera) + '">' + escapeHtml(carrera) + '</option>');
+      });
+      select.innerHTML = opciones.join('');
+      select.value = estadoPagina.carreras.indexOf(seleccionada) === -1 ? '' : seleccionada;
+    }
+
+    function renderTabla() {
+      const cuerpo = document.getElementById('cuerpo-expedientes');
+      const expedientes = estadoPagina.expedientes || [];
+      document.getElementById('total-expedientes').textContent = expedientes.length
+        ? 'Mostrando ' + expedientes.length + ' expediente(s).'
+        : '';
+      if (!expedientes.length) {
+        cuerpo.innerHTML = '<tr><td colspan="5" class="vacio">No hay expedientes con los filtros seleccionados.</td></tr>';
+        return;
+      }
+      cuerpo.innerHTML = expedientes.map(function (expediente) {
+        const clase = CLASE_ESTATUS[expediente.estatus] || 'estado-pendiente';
+        const activa = expediente.matricula === estadoPagina.matriculaActual ? ' class="fila-activa"' : '';
+        return '<tr' + activa + '>' +
+          '<td><strong>' + escapeHtml(expediente.nombre || 'Sin nombre') + '</strong><br>' +
+            '<span class="documento-meta">' + escapeHtml(expediente.matricula) + '</span></td>' +
+          '<td>' + escapeHtml(expediente.carrera || 'Sin carrera') + '</td>' +
+          '<td><span class="estado ' + clase + '">' + escapeHtml(expediente.estatus) + '</span></td>' +
+          '<td>' + expediente.conteos.aprobados + ' de ' + expediente.totalDocumentos + '<br>' +
+            '<span class="documento-meta">' + expediente.conteos.enRevision + ' en revision</span></td>' +
+          '<td><button type="button" class="boton boton-mini boton-secundario" data-accion="abrir" ' +
+            'data-matricula="' + escapeHtml(expediente.matricula) + '">Abrir</button></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function manejarTabla(evento) {
+      const boton = evento.target.closest('button[data-accion="abrir"]');
+      if (boton) {
+        abrirExpediente(boton.dataset.matricula);
+      }
+    }
+
+    /* ---------------- RF-17: detalle del expediente ---------------- */
+
+    async function abrirExpediente(matricula) {
+      if (!matricula) {
+        return;
+      }
+      estadoPagina.matriculaActual = matricula;
+      estadoPagina.documentoSeleccionado = '';
+      document.getElementById('detalle-expediente').innerHTML = '<p class="cargando">Cargando expediente...</p>';
+      try {
+        const respuesta = await api('apiObtenerExpedienteDictaminador', { matricula: matricula });
+        estadoPagina.expedienteActual = respuesta.expediente;
+        const documentos = respuesta.expediente.documentos || [];
+        const seleccionado = documentos.find(function (documento) {
+          return documento.puedeDictaminar;
+        }) || documentos[0];
+        estadoPagina.documentoSeleccionado = seleccionado ? seleccionado.tipo_documento : '';
+        renderDetalle();
+        renderTabla();
+      } catch (error) {
+        estadoPagina.expedienteActual = null;
+        document.getElementById('detalle-expediente').innerHTML =
+          '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+        mostrarAviso(error.message, 'error');
+      }
+    }
+
+    function renderDetalle() {
+      const contenedor = document.getElementById('detalle-expediente');
+      const expediente = estadoPagina.expedienteActual;
+      if (!expediente) {
+        contenedor.innerHTML = '<p class="vacio">Selecciona un expediente para revisar sus documentos.</p>';
+        return;
+      }
+
+      const documento = obtenerDocumentoSeleccionado(expediente);
+      const clase = CLASE_ESTATUS[expediente.estatus] || 'estado-pendiente';
+      const tabs = (expediente.documentos || []).map(function (item) {
+        const claseItem = CLASE_ESTATUS[item.estatus] || 'estado-pendiente';
+        const activo = item.tipo_documento === estadoPagina.documentoSeleccionado ? ' activo' : '';
+        return '<button type="button" class="dictamen-tab' + activo + '" data-accion="seleccionar-documento" ' +
+          'data-tipo="' + escapeHtml(item.tipo_documento) + '">' +
+          escapeHtml(item.tipo_documento) +
+          ' <span class="estado ' + claseItem + '">' + escapeHtml(item.estatus) + '</span></button>';
+      }).join('');
+
+      contenedor.innerHTML =
+        '<div class="dictamen-cabecera">' +
+          '<div>' +
+            '<h3>' + escapeHtml(expediente.nombre || 'Estudiante') + '</h3>' +
+            '<p class="dictamen-meta">' + escapeHtml(expediente.matricula) + ' | ' +
+              escapeHtml(expediente.carrera || 'Sin carrera') + ' | ' +
+              escapeHtml(expediente.generacion || 'Sin generacion') + '</p>' +
+          '</div>' +
+          '<span class="estado ' + clase + '">' + escapeHtml(expediente.estatus) + '</span>' +
+        '</div>' +
+        '<div class="dictamen-tabs">' + tabs + '</div>' +
+        '<div class="dictamen-cuadro">' +
+          renderVisorDocumento(documento) +
+          renderAccionesDictamen(documento) +
+        '</div>';
+    }
+
+    function obtenerDocumentoSeleccionado(expediente) {
+      const documentos = expediente && expediente.documentos ? expediente.documentos : [];
+      return documentos.find(function (documento) {
+        return documento.tipo_documento === estadoPagina.documentoSeleccionado;
+      }) || null;
+    }
+
+    function renderVisorDocumento(documento) {
+      if (!documento || !documento.url_archivo) {
+        return '<div class="visor-documento"><p class="vacio">El estudiante aun no ha cargado este documento.</p></div>';
+      }
+      if (!documento.url_vista_previa) {
+        return '<div class="visor-documento"><p class="vacio">Vista previa no disponible.</p>' +
+          '<p class="vacio"><a href="' + escapeHtml(documento.url_archivo) + '" target="_blank" rel="noopener">Abrir archivo</a></p></div>';
+      }
+      return '<div class="visor-documento"><iframe src="' + escapeHtml(documento.url_vista_previa) + '" ' +
+        'title="Vista previa de ' + escapeHtml(documento.tipo_documento) + '"></iframe></div>';
+    }
+
+    function renderAccionesDictamen(documento) {
+      if (!documento) {
+        return '<div class="acciones-dictamen"><p class="nota-dictamen">Selecciona un documento.</p></div>';
+      }
+      const clase = CLASE_ESTATUS[documento.estatus] || 'estado-pendiente';
+      let contenido = '<div class="acciones-dictamen">' +
+        '<h4>' + escapeHtml(documento.tipo_documento) + '</h4>' +
+        '<p class="nota-dictamen">Estatus: <span class="estado ' + clase + '">' + escapeHtml(documento.estatus) + '</span></p>';
+
+      if (documento.fecha_carga) {
+        contenido += '<p class="documento-meta">Cargado: ' + escapeHtml(formatearFechaHora(documento.fecha_carga)) + '</p>';
+      }
+      if (documento.url_archivo) {
+        contenido += '<p class="documento-meta"><a href="' + escapeHtml(documento.url_archivo) +
+          '" target="_blank" rel="noopener">Abrir en Drive</a></p>';
+      }
+      if (documento.observaciones) {
+        contenido += '<div class="observacion-previa"><strong>Observacion:</strong><br>' +
+          escapeHtml(documento.observaciones) + '</div>';
+      }
+      if (documento.fecha_dictamen) {
+        contenido += '<p class="documento-meta">Dictaminado: ' + escapeHtml(formatearFechaHora(documento.fecha_dictamen)) +
+          (documento.dictaminador ? ' por ' + escapeHtml(documento.dictaminador) : '') + '</p>';
+      }
+
+      if (documento.puedeDictaminar) {
+        contenido +=
+          '<label class="campo">Observacion (obligatoria al observar)' +
+            '<textarea id="campo-observacion" maxlength="1000" placeholder="Escribe el motivo de la observacion..."></textarea>' +
+          '</label>' +
+          '<div class="formulario-acciones">' +
+            '<button type="button" class="boton boton-mini" data-accion="aprobar" ' +
+              'data-tipo="' + escapeHtml(documento.tipo_documento) + '">Aprobar</button>' +
+            '<button type="button" class="boton boton-mini boton-peligro" data-accion="observar" ' +
+              'data-tipo="' + escapeHtml(documento.tipo_documento) + '">Observar / Rechazar</button>' +
+          '</div>';
+      } else {
+        contenido += '<p class="nota-dictamen">Este documento ya fue dictaminado.</p>';
+      }
+      return contenido + '</div>';
+    }
+
+    function manejarDetalle(evento) {
+      const boton = evento.target.closest('button[data-accion]');
+      if (!boton) {
+        return;
+      }
+      if (boton.dataset.accion === 'seleccionar-documento') {
+        estadoPagina.documentoSeleccionado = boton.dataset.tipo;
+        renderDetalle();
+        return;
+      }
+      if (boton.dataset.accion === 'aprobar' || boton.dataset.accion === 'observar') {
+        procesarDictamen(boton);
+      }
+    }
+
+    /* ---------------- RF-18 a RF-21: dictamen ---------------- */
+
+    async function procesarDictamen(boton) {
+      const expediente = estadoPagina.expedienteActual;
+      const documento = expediente ? obtenerDocumentoSeleccionado(expediente) : null;
+      if (!expediente || !documento || !documento.puedeDictaminar) {
+        mostrarAviso('El documento ya no esta disponible para dictamen. Actualiza el expediente.', 'error');
+        return;
+      }
+
+      const estatusNuevo = boton.dataset.accion === 'aprobar' ? ESTATUS_APROBADO : ESTATUS_OBSERVADO;
+      const campo = document.getElementById('campo-observacion');
+      const observacion = campo ? campo.value.trim() : '';
+      if (estatusNuevo === ESTATUS_OBSERVADO && !observacion) {
+        mostrarAviso('La observacion es obligatoria para observar o rechazar el documento.', 'error');
+        if (campo) {
+          campo.focus();
+        }
+        return;
+      }
+
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiDictaminarDocumento', {
+          matricula: expediente.matricula,
+          tipoDocumento: documento.tipo_documento,
+          estatusNuevo: estatusNuevo,
+          observacion: observacion,
+          estatusEsperado: documento.estatus,
+          fechaCargaEsperada: documento.fecha_carga
+        });
+        estadoPagina.expedienteActual = respuesta.expediente;
+        estadoPagina.documentoSeleccionado = documento.tipo_documento;
+        renderDetalle();
+        mostrarAviso(respuesta.mensaje, 'ok');
+        await cargarExpedientes(false);
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+        if (error.codigo === 'CONFLICTO') {
+          await abrirExpediente(expediente.matricula);
+        }
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+  </script>
+</body>
+</html>

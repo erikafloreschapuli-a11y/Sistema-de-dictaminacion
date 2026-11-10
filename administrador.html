@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel de Administrador - Dictaminacion UTP 2026</title>
+  <style>
+    <?!= include('estilos') ?>
+
+    /* Ajustes propios del panel de administracion */
+    .nota-cuenta { font-size: 12px; color: var(--texto-suave); }
+    .menu-enlace { display: inline-block; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="cabecera">
+    <div class="cabecera-contenido">
+      <div>
+        <p class="cabecera-institucion">Universidad Tecnologica de Puebla</p>
+        <h1>Dictaminacion de documentos - Nuevo ingreso 2026</h1>
+      </div>
+      <div class="cabecera-usuario">
+        <span class="cabecera-nombre"><?= usuario.nombre ?></span>
+        <span class="etiqueta-rol"><?= usuario.rol ?></span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="menu" aria-label="Secciones del panel">
+    <button type="button" class="menu-boton activo" data-seccion="reportes">Reportes</button>
+    <button type="button" class="menu-boton" data-seccion="dictaminadores">Dictaminadores</button>
+    <button type="button" class="menu-boton" data-seccion="estudiantes">Estudiantes</button>
+    <button type="button" class="menu-boton" data-seccion="configuracion">Configuracion</button>
+    <button type="button" class="menu-boton" data-seccion="historial">Historial</button>
+    <a class="menu-boton menu-enlace" href="?panel=dictaminador" target="_top">Dictaminar</a>
+  </nav>
+
+  <main class="contenedor">
+
+    <!-- RF-23: reportes generales -->
+    <section id="seccion-reportes" class="seccion">
+      <h2 class="seccion-titulo">Reportes generales <span class="rf">RF-23</span></h2>
+      <div class="tarjetas" id="contenedor-reportes">
+        <p class="cargando">Cargando reportes...</p>
+      </div>
+    </section>
+
+    <!-- RF-22: alta, baja y cambio de rol de dictaminadores -->
+    <section id="seccion-dictaminadores" class="seccion" hidden>
+      <h2 class="seccion-titulo">Dictaminadores <span class="rf">RF-22</span></h2>
+
+      <div class="panel">
+        <h3 id="titulo-formulario">Nuevo dictaminador</h3>
+        <form id="form-dictaminador" class="formulario">
+          <label class="campo">Correo institucional
+            <input type="email" id="campo-correo" placeholder="nombre@utpuebla.edu.mx" autocomplete="off" required>
+          </label>
+          <label class="campo">Nombre completo
+            <input type="text" id="campo-nombre" maxlength="120" required>
+          </label>
+          <label class="campo">Rol
+            <select id="campo-rol">
+              <option value="Dictaminador">Dictaminador</option>
+              <option value="Administrador">Administrador</option>
+            </select>
+          </label>
+          <label class="campo casilla">
+            <input type="checkbox" id="campo-activo" checked>
+            Usuario activo
+          </label>
+          <div class="formulario-acciones">
+            <button type="submit" class="boton" id="boton-guardar-dictaminador">Guardar</button>
+            <button type="button" class="boton boton-secundario" id="boton-limpiar">Limpiar</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="tabla-contenedor">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Correo</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th>Fecha de alta</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpo-dictaminadores">
+            <tr><td colspan="6" class="vacio">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- RF-25: importar lista de estudiantes -->
+    <section id="seccion-estudiantes" class="seccion" hidden>
+      <h2 class="seccion-titulo">Importar estudiantes <span class="rf">RF-25</span></h2>
+
+      <div class="panel">
+        <p>
+          Columnas obligatorias: <code>matricula</code>, <code>nombre</code>,
+          <code>correo_institucional</code>, <code>carrera</code>, <code>generacion</code>.
+          Opcionales: <code>correo_personal</code>, <code>telefono</code>, <code>estatus_general</code>.
+          El correo institucional debe pertenecer a <code>@alumno.utpuebla.edu.mx</code>.
+          Se acepta CSV con coma o punto y coma. Si hay un solo error, no se importa nada.
+        </p>
+        <div class="formulario">
+          <label class="campo">Archivo CSV
+            <input type="file" id="archivo-estudiantes" accept=".csv,.txt">
+          </label>
+          <label class="campo" style="grid-column: 1 / -1;">O pega la lista aqui
+            <textarea id="texto-estudiantes" placeholder="matricula;nombre;correo_institucional;carrera;generacion&#10;20260001;Ana Lopez;ana.lopez@alumno.utpuebla.edu.mx;Ingenieria;2026"></textarea>
+          </label>
+          <div class="formulario-acciones">
+            <button type="button" class="boton" id="boton-importar">Importar</button>
+            <button type="button" class="boton boton-secundario" id="boton-limpiar-importacion">Limpiar</button>
+          </div>
+        </div>
+        <div id="resultado-importacion" class="resultado" hidden></div>
+      </div>
+    </section>
+
+    <!-- RF-26: configuracion de parametros -->
+    <section id="seccion-configuracion" class="seccion" hidden>
+      <h2 class="seccion-titulo">Configuracion <span class="rf">RF-26</span></h2>
+
+      <div class="panel">
+        <form id="form-configuracion" class="formulario">
+          <label class="campo">Tamano maximo de archivo (MB)
+            <input type="number" id="campo-tamano" min="2" max="5" step="1" required>
+          </label>
+          <label class="campo">Tipos permitidos
+            <input type="text" id="campo-tipos" placeholder="PDF,JPG,PNG" required>
+          </label>
+          <label class="campo">Generacion activa
+            <input type="text" id="campo-generacion" maxlength="30" placeholder="2026" required>
+          </label>
+          <div class="formulario-acciones">
+            <button type="submit" class="boton" id="boton-guardar-configuracion">Guardar configuracion</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- RF-24: historial completo (solo lectura, RF-31) -->
+    <section id="seccion-historial" class="seccion" hidden>
+      <h2 class="seccion-titulo">Historial de cambios <span class="rf">RF-24</span></h2>
+
+      <div class="panel">
+        <form id="form-historial" class="filtros">
+          <label class="campo">Desde
+            <input type="date" id="filtro-desde">
+          </label>
+          <label class="campo">Hasta
+            <input type="date" id="filtro-hasta">
+          </label>
+          <label class="campo">Matricula
+            <input type="text" id="filtro-matricula" placeholder="20260001">
+          </label>
+          <label class="campo">Usuario
+            <input type="text" id="filtro-usuario" placeholder="correo o nombre">
+          </label>
+          <label class="campo">Tipo
+            <input type="text" id="filtro-tipo" placeholder="CURP, CONFIGURACION...">
+          </label>
+          <div class="formulario-acciones">
+            <button type="submit" class="boton">Buscar</button>
+            <button type="button" class="boton boton-secundario" id="boton-limpiar-filtros">Limpiar</button>
+          </div>
+        </form>
+      </div>
+
+      <p class="total-historial" id="total-historial"></p>
+      <div class="tabla-contenedor">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha y hora</th>
+              <th>Usuario</th>
+              <th>Matricula</th>
+              <th>Tipo</th>
+              <th>Antes</th>
+              <th>Despues</th>
+              <th>Observacion</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpo-historial">
+            <tr><td colspan="7" class="vacio">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mas-historial">
+        <button type="button" class="boton boton-secundario" id="boton-mas-historial" hidden>Cargar mas</button>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="aviso-global" class="aviso" hidden></div>
+  <div id="datos-sesion" data-correo="<?= usuario.correo ?>" hidden></div>
+
+ 
+    <?!= include('scripts') ?>
+  
+  <script>
+    // Estado del panel: secciones cargadas, listas en memoria y paginacion.
+    const estadoPagina = {
+      seccion: 'reportes',
+      cargado: { reportes: false, dictaminadores: false, configuracion: false, historial: false },
+      dictaminadores: [],
+      historial: { registros: [], hayMas: false },
+      editandoCorreo: '',
+      correoActual: ''
+    };
+
+    const DEFINICION_REPORTES = [
+      { clave: 'totalAlumnos', etiqueta: 'Total de alumnos', clase: 'tarjeta-neutro' },
+      { clave: 'pendientes', etiqueta: 'Pendientes', clase: 'tarjeta-gris' },
+      { clave: 'enRevision', etiqueta: 'En revision', clase: 'tarjeta-azul' },
+      { clave: 'aprobados', etiqueta: 'Aprobados', clase: 'tarjeta-verde' },
+      { clave: 'observados', etiqueta: 'Observados', clase: 'tarjeta-rojo' },
+      { clave: 'expedientesCompletos', etiqueta: 'Expedientes completos', clase: 'tarjeta-verde' }
+    ];
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const datosSesion = document.getElementById('datos-sesion');
+      estadoPagina.correoActual = datosSesion
+        ? String(datosSesion.dataset.correo || '').trim().toLowerCase()
+        : '';
+
+      document.querySelectorAll('.menu-boton').forEach(function (boton) {
+        boton.addEventListener('click', function () {
+          cambiarSeccion(boton.dataset.seccion);
+        });
+      });
+
+      document.getElementById('form-dictaminador').addEventListener('submit', guardarDictaminador);
+      document.getElementById('boton-limpiar').addEventListener('click', limpiarFormularioDictaminador);
+      document.getElementById('cuerpo-dictaminadores').addEventListener('click', manejarAccionDictaminador);
+
+      document.getElementById('boton-importar').addEventListener('click', importarEstudiantes);
+      document.getElementById('boton-limpiar-importacion').addEventListener('click', limpiarImportacion);
+      document.getElementById('archivo-estudiantes').addEventListener('change', leerArchivoCsv);
+
+      document.getElementById('form-configuracion').addEventListener('submit', guardarConfiguracion);
+
+      document.getElementById('form-historial').addEventListener('submit', function (evento) {
+        evento.preventDefault();
+        cargarHistorial(true);
+      });
+      document.getElementById('boton-limpiar-filtros').addEventListener('click', function () {
+        document.getElementById('form-historial').reset();
+        cargarHistorial(true);
+      });
+      document.getElementById('boton-mas-historial').addEventListener('click', function () {
+        cargarHistorial(false);
+      });
+
+      cargarReportes();
+    });
+
+    /* ---------------- Navegacion por secciones ---------------- */
+
+    function cambiarSeccion(nombre) {
+      estadoPagina.seccion = nombre;
+      document.querySelectorAll('.menu-boton').forEach(function (boton) {
+        boton.classList.toggle('activo', boton.dataset.seccion === nombre);
+      });
+      document.querySelectorAll('.seccion').forEach(function (seccion) {
+        seccion.hidden = seccion.id !== 'seccion-' + nombre;
+      });
+
+      if (nombre === 'reportes' && !estadoPagina.cargado.reportes) {
+        cargarReportes();
+      } else if (nombre === 'dictaminadores' && !estadoPagina.cargado.dictaminadores) {
+        cargarDictaminadores();
+      } else if (nombre === 'configuracion' && !estadoPagina.cargado.configuracion) {
+        cargarConfiguracion();
+      } else if (nombre === 'historial' && !estadoPagina.cargado.historial) {
+        cargarHistorial(true);
+      }
+    }
+
+    /* ---------------- RF-23: reportes ---------------- */
+
+    async function cargarReportes() {
+      const contenedor = document.getElementById('contenedor-reportes');
+      estadoPagina.cargado.reportes = true;
+      contenedor.innerHTML = '<p class="cargando">Cargando reportes...</p>';
+      try {
+        const respuesta = await api('apiObtenerReportesGenerales');
+        contenedor.innerHTML = DEFINICION_REPORTES.map(function (item) {
+          const valor = respuesta.reportes[item.clave] === undefined ? 0 : respuesta.reportes[item.clave];
+          return '<article class="tarjeta ' + item.clase + '">' +
+            '<p class="tarjeta-valor">' + valor + '</p>' +
+            '<p class="tarjeta-etiqueta">' + item.etiqueta + '</p>' +
+            '</article>';
+        }).join('');
+      } catch (error) {
+        estadoPagina.cargado.reportes = false;
+        contenedor.innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+        mostrarAviso(error.message, 'error');
+      }
+    }
+
+    /* ---------------- RF-22: dictaminadores ---------------- */
+
+    async function cargarDictaminadores() {
+      const cuerpo = document.getElementById('cuerpo-dictaminadores');
+      estadoPagina.cargado.dictaminadores = true;
+      cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Cargando...</td></tr>';
+      try {
+        const respuesta = await api('apiObtenerDictaminadores');
+        estadoPagina.dictaminadores = respuesta.dictaminadores;
+        renderDictaminadores();
+      } catch (error) {
+        estadoPagina.cargado.dictaminadores = false;
+        cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">' + escapeHtml(error.message) + '</td></tr>';
+        mostrarAviso(error.message, 'error');
+      }
+    }
+
+    function renderDictaminadores() {
+      const cuerpo = document.getElementById('cuerpo-dictaminadores');
+      if (!estadoPagina.dictaminadores.length) {
+        cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Todavia no hay dictaminadores dados de alta.</td></tr>';
+        return;
+      }
+      cuerpo.innerHTML = estadoPagina.dictaminadores.map(function (diccionario) {
+        const esCuentaActual = String(diccionario.correo || '').trim().toLowerCase() === estadoPagina.correoActual;
+        const estado = diccionario.activo
+          ? '<span class="estado estado-activo">Activo</span>'
+          : '<span class="estado estado-inactivo">Inactivo</span>';
+        const accionEstado = diccionario.activo
+          ? '<button type="button" class="boton boton-mini boton-peligro" data-accion="estado" data-activo="false" data-correo="' + escapeHtml(diccionario.correo) + '">Dar de baja</button>'
+          : '<button type="button" class="boton boton-mini boton-secundario" data-accion="estado" data-activo="true" data-correo="' + escapeHtml(diccionario.correo) + '">Reactivar</button>';
+        const acciones = esCuentaActual
+          ? '<span class="nota-cuenta">Tu cuenta</span>'
+          : '<button type="button" class="boton boton-mini boton-secundario" data-accion="editar" data-correo="' + escapeHtml(diccionario.correo) + '">Editar</button>' +
+            accionEstado;
+        return '<tr>' +
+          '<td>' + escapeHtml(diccionario.nombre) + '</td>' +
+          '<td>' + escapeHtml(diccionario.correo) + '</td>' +
+          '<td>' + escapeHtml(diccionario.rol) + '</td>' +
+          '<td>' + estado + '</td>' +
+          '<td>' + escapeHtml(formatearFechaHora(diccionario.fecha_alta)) + '</td>' +
+          '<td class="acciones">' + acciones + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    async function guardarDictaminador(evento) {
+      evento.preventDefault();
+      const boton = document.getElementById('boton-guardar-dictaminador');
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiGuardarDictaminador', {
+          correo: document.getElementById('campo-correo').value,
+          nombre: document.getElementById('campo-nombre').value,
+          rol: document.getElementById('campo-rol').value,
+          activo: document.getElementById('campo-activo').checked
+        });
+        estadoPagina.cargado.historial = false;
+        mostrarAviso('Usuario guardado: ' + respuesta.accion.toLowerCase() + '.', 'ok');
+        limpiarFormularioDictaminador();
+        await cargarDictaminadores();
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+
+    function limpiarFormularioDictaminador() {
+      document.getElementById('form-dictaminador').reset();
+      document.getElementById('campo-activo').checked = true;
+      document.getElementById('campo-correo').readOnly = false;
+      document.getElementById('titulo-formulario').textContent = 'Nuevo dictaminador';
+      estadoPagina.editandoCorreo = '';
+    }
+
+    async function manejarAccionDictaminador(evento) {
+      const boton = evento.target.closest('button');
+      if (!boton) {
+        return;
+      }
+      const correo = boton.dataset.correo;
+
+      if (String(correo || '').trim().toLowerCase() === estadoPagina.correoActual) {
+        mostrarAviso('No puedes modificar tu propia cuenta desde este panel.', 'error');
+        return;
+      }
+
+      if (boton.dataset.accion === 'editar') {
+        const diccionario = estadoPagina.dictaminadores.find(function (elemento) {
+          return elemento.correo === correo;
+        });
+        if (!diccionario) {
+          return;
+        }
+        document.getElementById('campo-correo').value = diccionario.correo;
+        document.getElementById('campo-correo').readOnly = true;
+        document.getElementById('campo-nombre').value = diccionario.nombre;
+        document.getElementById('campo-rol').value = diccionario.rol;
+        document.getElementById('campo-activo').checked = diccionario.activo;
+        document.getElementById('titulo-formulario').textContent = 'Editando: ' + diccionario.nombre;
+        estadoPagina.editandoCorreo = diccionario.correo;
+        document.getElementById('campo-nombre').focus();
+        return;
+      }
+
+      if (boton.dataset.accion === 'estado') {
+        const activo = boton.dataset.activo === 'true';
+        const confirmacion = activo
+          ? '¿Reactivar a ' + correo + '?'
+          : '¿Dar de baja a ' + correo + '? Podra volver a activarse despues.';
+        if (!window.confirm(confirmacion)) {
+          return;
+        }
+        marcarCargando(boton, true);
+        try {
+          await api('apiCambiarEstadoDictaminador', { correo: correo, activo: activo });
+          estadoPagina.cargado.historial = false;
+          mostrarAviso(activo ? 'Usuario reactivado.' : 'Usuario dado de baja.', 'ok');
+          await cargarDictaminadores();
+        } catch (error) {
+          mostrarAviso(error.message, 'error');
+          marcarCargando(boton, false);
+        }
+      }
+    }
+
+    /* ---------------- RF-25: importar estudiantes ---------------- */
+
+    function leerArchivoCsv(evento) {
+      const archivo = evento.target.files[0];
+      if (!archivo) {
+        return;
+      }
+      const lector = new FileReader();
+      lector.onload = function (carga) {
+        document.getElementById('texto-estudiantes').value = String(carga.target.result || '');
+        document.getElementById('resultado-importacion').hidden = true;
+      };
+      lector.onerror = function () {
+        mostrarAviso('No se pudo leer el archivo.', 'error');
+      };
+      lector.readAsText(archivo);
+    }
+
+    async function importarEstudiantes() {
+      const boton = document.getElementById('boton-importar');
+      const texto = document.getElementById('texto-estudiantes').value;
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiImportarEstudiantes', { texto: texto });
+        mostrarResultadoImportacion(
+          '<div class="resultado-ok">Se importaron ' + respuesta.insertados + ' estudiante(s) correctamente.</div>'
+        );
+        mostrarAviso('Importacion exitosa: ' + respuesta.insertados + ' registro(s).', 'ok');
+        document.getElementById('texto-estudiantes').value = '';
+        document.getElementById('archivo-estudiantes').value = '';
+        estadoPagina.cargado.reportes = false;
+        estadoPagina.cargado.historial = false;
+      } catch (error) {
+        let detalle = '';
+        if (error.errores && error.errores.length) {
+          detalle = '<ul class="lista-errores">' + error.errores.map(function (item) {
+            return '<li>Fila ' + item.fila + ': ' + escapeHtml(item.mensaje) + '</li>';
+          }).join('') + '</ul>';
+        }
+        mostrarResultadoImportacion('<div class="resultado-error">' + escapeHtml(error.message) + detalle + '</div>');
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+
+    function mostrarResultadoImportacion(html) {
+      const contenedor = document.getElementById('resultado-importacion');
+      contenedor.innerHTML = html;
+      contenedor.hidden = false;
+    }
+
+    function limpiarImportacion() {
+      document.getElementById('texto-estudiantes').value = '';
+      document.getElementById('archivo-estudiantes').value = '';
+      document.getElementById('resultado-importacion').hidden = true;
+      document.getElementById('resultado-importacion').innerHTML = '';
+    }
+
+    /* ---------------- RF-26: configuracion ---------------- */
+
+    async function cargarConfiguracion() {
+      estadoPagina.cargado.configuracion = true;
+      try {
+        const respuesta = await api('apiObtenerConfiguracion');
+        mostrarConfiguracion(respuesta.configuracion);
+      } catch (error) {
+        estadoPagina.cargado.configuracion = false;
+        mostrarAviso(error.message, 'error');
+      }
+    }
+
+    function mostrarConfiguracion(configuracion) {
+      document.getElementById('campo-tamano').value = configuracion.TAMANIO_MAXIMO_ARCHIVO_MB;
+      document.getElementById('campo-tipos').value = configuracion.TIPOS_PERMITIDOS;
+      document.getElementById('campo-generacion').value = configuracion.GENERACION_ACTIVA;
+    }
+
+    async function guardarConfiguracion(evento) {
+      evento.preventDefault();
+      const boton = document.getElementById('boton-guardar-configuracion');
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiGuardarConfiguracion', {
+          TAMANIO_MAXIMO_ARCHIVO_MB: document.getElementById('campo-tamano').value,
+          TIPOS_PERMITIDOS: document.getElementById('campo-tipos').value,
+          GENERACION_ACTIVA: document.getElementById('campo-generacion').value
+        });
+        estadoPagina.cargado.historial = false;
+        mostrarConfiguracion(respuesta.configuracion);
+        mostrarAviso('Configuracion guardada.', 'ok');
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+
+    /* ---------------- RF-24: historial ---------------- */
+
+    async function cargarHistorial(limpiar) {
+      const boton = document.getElementById('boton-mas-historial');
+      const cuerpo = document.getElementById('cuerpo-historial');
+      estadoPagina.cargado.historial = true;
+      if (limpiar) {
+        estadoPagina.historial.registros = [];
+        estadoPagina.historial.hayMas = false;
+        document.getElementById('total-historial').textContent = '';
+        boton.hidden = true;
+        cuerpo.innerHTML = '<tr><td colspan="7" class="vacio">Cargando...</td></tr>';
+      }
+      boton.disabled = true;
+      try {
+        const respuesta = await api('apiObtenerHistorial', {
+          fechaDesde: document.getElementById('filtro-desde').value,
+          fechaHasta: document.getElementById('filtro-hasta').value,
+          matricula: document.getElementById('filtro-matricula').value,
+          usuario: document.getElementById('filtro-usuario').value,
+          tipoDocumento: document.getElementById('filtro-tipo').value,
+          desplazamiento: estadoPagina.historial.registros.length
+        });
+        const nuevos = respuesta.registros.map(function (registro) {
+          return {
+            fecha_hora: formatearFechaHora(registro.fecha_hora),
+            usuario: registro.usuario,
+            matricula: registro.matricula,
+            tipo_documento: registro.tipo_documento,
+            estatus_anterior: registro.estatus_anterior,
+            estatus_nuevo: registro.estatus_nuevo,
+            observacion: registro.observacion
+          };
+        });
+        estadoPagina.historial.registros = estadoPagina.historial.registros.concat(nuevos);
+        estadoPagina.historial.hayMas = respuesta.hayMas;
+        renderHistorial(respuesta.total);
+      } catch (error) {
+        estadoPagina.cargado.historial = false;
+        estadoPagina.historial.hayMas = false;
+        boton.hidden = true;
+        document.getElementById('total-historial').textContent = '';
+        cuerpo.innerHTML = '<tr><td colspan="7" class="vacio">' + escapeHtml(error.message) + '</td></tr>';
+        mostrarAviso(error.message, 'error');
+      } finally {
+        boton.disabled = false;
+      }
+    }
+
+    function renderHistorial(total) {
+      const cuerpo = document.getElementById('cuerpo-historial');
+      const registros = estadoPagina.historial.registros;
+      document.getElementById('total-historial').textContent =
+        'Mostrando ' + registros.length + ' de ' + total + ' registro(s).';
+
+      if (!registros.length) {
+        cuerpo.innerHTML = '<tr><td colspan="7" class="vacio">No hay registros que coincidan con los filtros.</td></tr>';
+      } else {
+        cuerpo.innerHTML = registros.map(function (registro) {
+          return '<tr>' +
+            '<td>' + escapeHtml(registro.fecha_hora) + '</td>' +
+            '<td>' + escapeHtml(registro.usuario) + '</td>' +
+            '<td>' + escapeHtml(registro.matricula) + '</td>' +
+            '<td>' + escapeHtml(registro.tipo_documento) + '</td>' +
+            '<td>' + escapeHtml(registro.estatus_anterior) + '</td>' +
+            '<td>' + escapeHtml(registro.estatus_nuevo) + '</td>' +
+            '<td>' + escapeHtml(registro.observacion) + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+      document.getElementById('boton-mas-historial').hidden = !estadoPagina.historial.hayMas;
+    }
+  </script>
+</body>
+</html>

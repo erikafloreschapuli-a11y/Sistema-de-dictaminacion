@@ -1,0 +1,75 @@
+/* estudianteStyle.html - Estilos propios del panel del estudiante. */
+/* Los estilos compartidos se incluyen antes desde estilos. */
+<style>
+.datos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.dato {
+  background: var(--gris-100);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.dato-etiqueta {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--texto-suave);
+}
+.dato-valor {
+  margin: 2px 0 0;
+  font-weight: bold;
+  word-break: break-word;
+}
+.documentos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.documento-tarjeta {
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-left: 5px solid var(--gris-500);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: var(--sombra);
+}
+.documento-tarjeta.borde-pendiente { border-left-color: var(--gris-500); }
+.documento-tarjeta.borde-revision { border-left-color: var(--azul-700); }
+.documento-tarjeta.borde-aprobado { border-left-color: var(--verde-700); }
+.documento-tarjeta.borde-observado { border-left-color: var(--rojo-700); }
+.documento-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.documento-cabecera h3 { margin: 0; font-size: 16px; color: var(--verde-900); }
+.documento-meta { margin: 2px 0; font-size: 13px; color: var(--texto-suave); }
+.documento-meta a { color: var(--azul-700); }
+.documento-observacion {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--rojo-100);
+  color: var(--rojo-700);
+  font-size: 13px;
+}
+.documento-observacion strong { display: block; margin-bottom: 2px; }
+.documento-acciones {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.documento-archivo { max-width: 100%; font-size: 13px; }
+.nota-bloqueo { font-size: 13px; color: var(--texto-suave); font-style: italic; }
+.resumen-expediente { font-size: 14px; color: var(--texto-suave); margin: 0 0 14px; }
+@media (max-width: 420px) {
+  .documento-cabecera { flex-direction: column; }
+}
+</style>

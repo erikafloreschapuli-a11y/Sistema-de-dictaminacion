@@ -1,0 +1,163 @@
+<style>
+
+/* dictaminadorStyle.html - Distribucion de revision y visor de documentos */
+
+.menu-enlace {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.dictamen-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.dictamen-lista,
+.dictamen-detalle {
+  min-width: 0;
+}
+
+.dictamen-detalle {
+  position: sticky;
+  top: 64px;
+}
+
+.total-expedientes {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.documento-meta {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.fila-activa {
+  background: var(--verde-100) !important;
+}
+
+.dictamen-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dictamen-cabecera h3 {
+  margin: 0 0 4px;
+  color: var(--verde-900);
+}
+
+.dictamen-meta {
+  margin: 0;
+  color: var(--texto-suave);
+  font-size: 13px;
+}
+
+.dictamen-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dictamen-tab {
+  border: 1px solid var(--borde);
+  background: #fff;
+  color: var(--texto-suave);
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dictamen-tab.activo {
+  background: var(--verde-700);
+  border-color: var(--verde-700);
+  color: #fff;
+}
+
+.dictamen-cuadro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 12px;
+}
+
+.visor-documento {
+  background: var(--gris-100);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.visor-documento iframe {
+  display: block;
+  width: 100%;
+  height: 500px;
+  border: 0;
+  background: #fff;
+}
+
+.acciones-dictamen {
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.acciones-dictamen h4 {
+  margin: 0 0 8px;
+  color: var(--verde-900);
+  font-size: 15px;
+}
+
+.acciones-dictamen .campo {
+  margin-bottom: 10px;
+}
+
+.acciones-dictamen textarea {
+  min-height: 120px;
+}
+
+.observacion-previa {
+  background: var(--rojo-100);
+  color: var(--rojo-700);
+  border-radius: 6px;
+  padding: 9px 11px;
+  font-size: 13px;
+  margin: 10px 0;
+  white-space: pre-wrap;
+}
+
+.nota-dictamen {
+  color: var(--texto-suave);
+  font-size: 13px;
+}
+
+@media (max-width: 980px) {
+  .dictamen-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dictamen-detalle {
+    position: static;
+  }
+
+  .dictamen-cuadro {
+    grid-template-columns: 1fr;
+  }
+
+  .visor-documento iframe {
+    height: 380px;
+  }
+}
+<style>
