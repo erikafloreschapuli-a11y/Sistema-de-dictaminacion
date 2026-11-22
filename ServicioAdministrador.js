@@ -1,6 +1,6 @@
 /**
  * ServicioAdministrador.js
- * Panel del Administrador: dictaminadores (RF-22), historial (RF-24),
+ * Panel del Administrador: dictaminadores (RF-22),
  * importacion de estudiantes (RF-25) y configuracion (RF-26).
  * Toda escritura ocurre dentro de conBloqueoEscritura (RNF-03).
  */
@@ -61,7 +61,7 @@ function apiGuardarDictaminador(datos) {
       throw crearError('VALIDACION', 'No puedes modificar tu propia cuenta desde este panel.');
     }
 
-    return conBloqueoEscritura(function () {
+    const resultado = conBloqueoEscritura(function () {
       const actual = buscarPorClave(HOJAS.USUARIOS, 'correo', correo);
       let accion = 'Alta';
       if (actual) {
@@ -88,6 +88,10 @@ function apiGuardarDictaminador(datos) {
       }
       return { ok: true, accion: accion, correo: correo };
     });
+
+    // RF-34: solo personal activo edita la carpeta raiz de expedientes.
+    resultado.avisoCarpeta = actualizarPermisoCarpeta(correo, activo);
+    return resultado;
   });
 }
 
@@ -104,7 +108,7 @@ function apiCambiarEstadoDictaminador(datos) {
       throw crearError('VALIDACION', 'No puedes cambiar el estado de tu propia cuenta.');
     }
 
-    return conBloqueoEscritura(function () {
+    const resultado = conBloqueoEscritura(function () {
       const actual = buscarPorClave(HOJAS.USUARIOS, 'correo', correo);
       if (!actual) {
         throw crearError('VALIDACION', 'No existe un usuario con ese correo.');
@@ -122,80 +126,10 @@ function apiCambiarEstadoDictaminador(datos) {
       });
       return { ok: true, correo: correo, activo: activo };
     });
+
+    resultado.avisoCarpeta = actualizarPermisoCarpeta(correo, activo);
+    return resultado;
   });
-}
-
-/* ------------------------------------------------------------------ */
-/* RF-24: consulta del historial completo                              */
-/* ------------------------------------------------------------------ */
-
-/**
- * Devuelve el historial filtrado y paginado (RF-24, RF-31: solo lectura).
- * Filtros: fechaDesde, fechaHasta, matricula, usuario, tipoDocumento.
- */
-function apiObtenerHistorial(datos) {
-  return protegerApi(function () {
-    asegurarRol([ROLES.ADMINISTRADOR]);
-    const parametros = datos || {};
-    const registros = leerHoja(HOJAS.HISTORIAL);
-    const filtrados = filtrarHistorial(registros, parametros);
-
-    filtrados.sort(function (a, b) {
-      return new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime();
-    });
-
-    const desplazamiento = Math.max(0, Number(parametros.desplazamiento) || 0);
-    const pagina = filtrados.slice(desplazamiento, desplazamiento + LIMITE_PAGINA_HISTORIAL);
-    return {
-      ok: true,
-      total: filtrados.length,
-      registros: pagina.map(convertirRegistroHistorial),
-      hayMas: desplazamiento + pagina.length < filtrados.length
-    };
-  });
-}
-
-/**
- * Aplica los filtros del formulario sobre las filas del historial.
- */
-function filtrarHistorial(registros, filtros) {
-  const matricula = String(filtros.matricula || '').trim().toLowerCase();
-  const usuario = String(filtros.usuario || '').trim().toLowerCase();
-  const tipoDocumento = String(filtros.tipoDocumento || '').trim().toLowerCase();
-  const desde = filtros.fechaDesde ? parsearFechaSolo(filtros.fechaDesde) : null;
-  const hasta = filtros.fechaHasta ? parsearFechaSolo(filtros.fechaHasta) : null;
-  if (desde) {
-    desde.setHours(0, 0, 0, 0);
-  }
-  if (hasta) {
-    hasta.setHours(23, 59, 59, 999);
-  }
-
-  return registros.filter(function (registro) {
-    const momento = new Date(registro.fecha_hora).getTime();
-    if (desde && !isNaN(momento) && momento < desde.getTime()) return false;
-    if (hasta && !isNaN(momento) && momento > hasta.getTime()) return false;
-    if (matricula && String(registro.matricula).toLowerCase().indexOf(matricula) === -1) return false;
-    if (usuario && String(registro.usuario).toLowerCase().indexOf(usuario) === -1) return false;
-    if (tipoDocumento && String(registro.tipo_documento).toLowerCase().indexOf(tipoDocumento) === -1) return false;
-    return true;
-  });
-}
-
-/**
- * Convierte una fila interna en un registro seguro para el navegador.
- */
-function convertirRegistroHistorial(registro) {
-  return {
-    id_registro: String(registro.id_registro),
-    fecha_hora: convertirFechaTexto(registro.fecha_hora),
-    usuario: String(registro.usuario),
-    matricula: String(registro.matricula),
-    tipo_documento: String(registro.tipo_documento),
-    estatus_anterior: String(registro.estatus_anterior),
-    estatus_nuevo: String(registro.estatus_nuevo),
-    observacion: String(registro.observacion)
-  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -288,7 +222,8 @@ function apiImportarEstudiantes(datos) {
         telefono: telefono,
         carrera: carrera,
         generacion: generacion,
-        estatus_general: String(fila.estatus_general || '').trim() || 'Incompleto'
+        // El estatus se calcula a partir de los documentos; un alumno nuevo no tiene ninguno.
+        estatus_general: ESTATUS_EXPEDIENTE.PENDIENTE
       });
     });
 
@@ -301,7 +236,7 @@ function apiImportarEstudiantes(datos) {
       };
     }
 
-    return conBloqueoEscritura(function () {
+    const resultado = conBloqueoEscritura(function () {
       const actuales = leerHoja(HOJAS.ESTUDIANTES);
       const matriculasAhora = {};
       actuales.forEach(function (estudiante) {
@@ -324,6 +259,10 @@ function apiImportarEstudiantes(datos) {
       });
       return { ok: true, insertados: nuevos.length, errores: [] };
     });
+
+    // Fuera del lock: crear carpetas en Drive es lento y no toca la hoja.
+    resultado.carpetas = crearCarpetasConContinuacion(nuevos, TIEMPO_CARPETAS_IMPORTACION_MS);
+    return resultado;
   });
 }
 
@@ -340,10 +279,71 @@ function apiObtenerConfiguracion() {
     const valores = obtenerValoresConfiguracion();
     const configuracion = {};
     CLAVES_CONFIGURACION.forEach(function (clave) {
-      configuracion[clave] = valores[clave];
+      configuracion[clave] = valores[clave] || CONFIGURACION_PREDETERMINADA[clave];
     });
-    return { ok: true, configuracion: configuracion };
+    // Se muestran los formatos que realmente se aplican, no los guardados en la hoja.
+    configuracion.TIPOS_PERMITIDOS = obtenerTiposPermitidos().join(',');
+    return { ok: true, configuracion: configuracion, marcadores: MARCADORES_PLANTILLA };
   });
+}
+
+/**
+ * Valida y guarda asuntos y cuerpos de los correos automaticos (RF-29).
+ */
+function apiGuardarPlantillasCorreo(datos) {
+  return protegerApi(function () {
+    const usuario = asegurarRol([ROLES.ADMINISTRADOR]);
+    const parametros = datos || {};
+    const valores = {};
+    CLAVES_PLANTILLAS_CORREO.forEach(function (clave) {
+      valores[clave] = validarPlantillaCorreo(clave, parametros[clave]);
+    });
+
+    return conBloqueoEscritura(function () {
+      guardarClavesConfiguracion(valores);
+      registrarEnHistorial({
+        usuario: usuario.correo,
+        tipo_documento: 'CONFIGURACION',
+        estatus_anterior: '-',
+        estatus_nuevo: 'Plantillas de correo actualizadas',
+        observacion: 'Se actualizaron los asuntos y textos de los correos automaticos'
+      });
+      return { ok: true, configuracion: valores };
+    });
+  });
+}
+
+/**
+ * Normaliza una plantilla y rechaza las vacias, muy largas o con marcadores
+ * que no existen para ese correo (RNF-06).
+ */
+function validarPlantillaCorreo(clave, valor) {
+  const esAsunto = clave.indexOf('ASUNTO_') === 0;
+  const etiqueta = esAsunto ? 'El asunto' : 'El texto del correo';
+  const limite = esAsunto ? LONGITUD_MAXIMA_ASUNTO_CORREO : LONGITUD_MAXIMA_CUERPO_CORREO;
+  let texto = String(valor === undefined || valor === null ? '' : valor).replace(/\r\n?/g, '\n').trim();
+  if (esAsunto) {
+    texto = texto.replace(/\s*\n\s*/g, ' ');
+  }
+  if (!texto) {
+    throw crearError('VALIDACION', etiqueta + ' no puede quedar vacio.');
+  }
+  if (texto.length > limite) {
+    throw crearError('VALIDACION', etiqueta + ' no puede superar ' + limite + ' caracteres.');
+  }
+  const permitidos = MARCADORES_PLANTILLA[clave] || [];
+  const desconocidos = [];
+  texto.replace(/\{\{\s*(\w+)\s*\}\}/g, function (coincidencia, marcador) {
+    if (permitidos.indexOf(marcador) === -1 && desconocidos.indexOf(marcador) === -1) {
+      desconocidos.push(marcador);
+    }
+    return coincidencia;
+  });
+  if (desconocidos.length) {
+    throw crearError('VALIDACION', etiqueta + ' usa marcadores no validos: {{' + desconocidos.join('}}, {{') +
+      '}}. Disponibles: {{' + permitidos.join('}}, {{') + '}}.');
+  }
+  return texto;
 }
 
 /**
@@ -413,7 +413,8 @@ function apiGuardarConfiguracion(datos) {
 function guardarClavesConfiguracion(valores) {
   const existentes = leerHoja(HOJAS.CONFIGURACION);
   const filasNuevas = [];
-  CLAVES_CONFIGURACION.forEach(function (clave) {
+  // Solo se tocan las claves recibidas: parametros y plantillas se guardan por separado.
+  Object.keys(valores).forEach(function (clave) {
     const fila = existentes.find(function (registro) {
       return String(registro.clave).trim() === clave;
     });
@@ -431,24 +432,6 @@ function guardarClavesConfiguracion(valores) {
 /* ------------------------------------------------------------------ */
 /* Funciones auxiliares internas                                       */
 /* ------------------------------------------------------------------ */
-
-/**
- * Agrega una fila de auditoria al historial. Requiere lock activo.
- */
-function registrarEnHistorial(datos) {
-  insertarRegistros(HOJAS.HISTORIAL, [
-    {
-      id_registro: generarId(PREFIJOS_ID.HISTORIAL),
-      fecha_hora: new Date(),
-      usuario: datos.usuario || '',
-      matricula: datos.matricula || '',
-      tipo_documento: datos.tipo_documento || '',
-      estatus_anterior: datos.estatus_anterior || '',
-      estatus_nuevo: datos.estatus_nuevo || '',
-      observacion: datos.observacion || ''
-    }
-  ]);
-}
 
 function validarCorreoTrabajador(correo) {
   if (!esCorreoValido(correo)) {

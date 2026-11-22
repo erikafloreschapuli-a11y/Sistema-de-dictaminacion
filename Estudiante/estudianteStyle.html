@@ -1,75 +1,100 @@
-/* estudianteStyle.html - Estilos propios del panel del estudiante. */
-/* Los estilos compartidos se incluyen antes desde estilos. */
-<style>
-.datos-grid {
+/* estudianteStyle.html - Estilos propios del panel del estudiante.
+   Se incluye dentro de la etiqueta style de estudiante.html, despues de estilos. */
+
+.bienvenida {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  background: linear-gradient(120deg, var(--verde-50), #fff 60%);
 }
-.dato {
-  background: var(--gris-100);
-  border-radius: 6px;
-  padding: 10px 12px;
-}
-.dato-etiqueta {
-  margin: 0;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--texto-suave);
-}
-.dato-valor {
-  margin: 2px 0 0;
-  font-weight: bold;
-  word-break: break-word;
-}
+.bienvenida h2 { margin: 0 0 4px; font-size: 22px; }
+.bienvenida p { margin: 0; }
+.avance { margin-top: 16px; max-width: 520px; }
+.avance-texto { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: var(--texto-suave); }
+.avance-texto strong { color: var(--texto); }
+.avance-barra { height: 10px; border-radius: 999px; background: var(--gris-100); overflow: hidden; }
+.avance-relleno { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--verde-600), var(--verde-700)); transition: width 0.4s; }
+.bienvenida-estatus { text-align: right; }
+.bienvenida-estatus .estado { font-size: 13px; padding: 5px 12px; }
+.bienvenida-estatus small { display: block; margin-top: 6px; color: var(--texto-suave); font-size: 12px; }
+
 .documentos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 16px;
 }
 .documento-tarjeta {
-  background: #fff;
+  background: var(--superficie);
   border: 1px solid var(--borde);
-  border-left: 5px solid var(--gris-500);
-  border-radius: 8px;
-  padding: 16px;
+  border-top: 4px solid var(--gris-300);
+  border-radius: var(--radio);
+  padding: 18px;
   box-shadow: var(--sombra);
-}
-.documento-tarjeta.borde-pendiente { border-left-color: var(--gris-500); }
-.documento-tarjeta.borde-revision { border-left-color: var(--azul-700); }
-.documento-tarjeta.borde-aprobado { border-left-color: var(--verde-700); }
-.documento-tarjeta.borde-observado { border-left-color: var(--rojo-700); }
-.documento-cabecera {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 12px;
 }
-.documento-cabecera h3 { margin: 0; font-size: 16px; color: var(--verde-900); }
-.documento-meta { margin: 2px 0; font-size: 13px; color: var(--texto-suave); }
-.documento-meta a { color: var(--azul-700); }
+.documento-tarjeta.borde-revision { border-top-color: #f59e0b; }
+.documento-tarjeta.borde-aprobado { border-top-color: var(--verde-600); }
+.documento-tarjeta.borde-observado { border-top-color: var(--rojo-700); }
+.documento-cabecera { display: flex; align-items: center; gap: 12px; }
+.documento-icono {
+  width: 40px; height: 40px; flex: none; border-radius: 10px;
+  display: grid; place-items: center; background: var(--gris-100); color: var(--gris-500);
+}
+.borde-revision .documento-icono { background: var(--ambar-100); color: var(--ambar-700); }
+.borde-aprobado .documento-icono { background: var(--verde-100); color: var(--verde-700); }
+.borde-observado .documento-icono { background: var(--rojo-100); color: var(--rojo-700); }
+.documento-cabecera h3 { margin: 0; font-size: 16px; }
+.documento-cabecera .estado { margin-left: auto; }
+.documento-mensaje { margin: 0; font-size: 14px; color: var(--texto-suave); }
+.documento-meta { margin: 0; font-size: 12px; color: var(--texto-suave); }
 .documento-observacion {
-  margin: 10px 0;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: var(--rojo-100);
+  padding: 12px 14px;
+  border-radius: var(--radio-chico);
+  background: var(--rojo-50);
+  border: 1px solid #f3b4b4;
   color: var(--rojo-700);
-  font-size: 13px;
+  font-size: 14px;
+  white-space: pre-wrap;
 }
-.documento-observacion strong { display: block; margin-bottom: 2px; }
-.documento-acciones {
-  margin-top: 12px;
+.documento-observacion strong { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.documento-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+
+/* Zona para arrastrar o elegir el archivo (RNF-08) */
+.zona-carga {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
   align-items: center;
+  gap: 4px;
+  padding: 18px 12px;
+  border: 2px dashed var(--borde-fuerte);
+  border-radius: var(--radio-chico);
+  background: #fafcfb;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
-.documento-archivo { max-width: 100%; font-size: 13px; }
-.nota-bloqueo { font-size: 13px; color: var(--texto-suave); font-style: italic; }
-.resumen-expediente { font-size: 14px; color: var(--texto-suave); margin: 0 0 14px; }
-@media (max-width: 420px) {
-  .documento-cabecera { flex-direction: column; }
+.zona-carga:hover, .zona-carga.arrastrando { border-color: var(--verde-700); background: var(--verde-50); }
+.zona-carga .icono { width: 24px; height: 24px; color: var(--verde-700); }
+.zona-carga strong { font-size: 14px; }
+.zona-carga span { font-size: 12px; color: var(--texto-suave); }
+.zona-carga input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.zona-carga.con-archivo { border-style: solid; border-color: var(--verde-700); background: var(--verde-50); }
+.nota-bloqueo { font-size: 13px; color: var(--texto-suave); }
+
+.datos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
 }
-</style>
+.dato { background: #f8faf9; border: 1px solid var(--borde); border-radius: var(--radio-chico); padding: 12px 14px; }
+.dato-etiqueta { margin: 0; font-size: 12px; color: var(--texto-suave); }
+.dato-valor { margin: 2px 0 0; font-weight: 600; word-break: break-word; }
+
+@media (max-width: 640px) {
+  .bienvenida { grid-template-columns: 1fr; }
+  .bienvenida-estatus { text-align: left; }
+}

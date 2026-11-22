@@ -1,163 +1,108 @@
-<style>
-
-/* dictaminadorStyle.html - Distribucion de revision y visor de documentos */
-
-.menu-enlace {
-  display: inline-block;
-  text-decoration: none;
-}
+/* dictaminadorStyle.html - Distribucion de revision y dictamen (RF-17).
+   Se incluye dentro de la etiqueta style de dictaminador.html, despues de estilos. */
 
 .dictamen-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(380px, 1fr);
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
+.dictamen-lista, .dictamen-detalle { min-width: 0; }
+.dictamen-detalle { position: sticky; top: 64px; margin-bottom: 0; }
 
-.dictamen-lista,
-.dictamen-detalle {
-  min-width: 0;
-}
+.filtros-compactos { display: grid; gap: 10px; margin-bottom: 12px; padding: 14px; }
+.filtros-compactos .fila-filtros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.filtros-compactos .formulario-acciones { justify-content: flex-end; }
+.total-expedientes { margin: 0 0 8px; font-size: 13px; color: var(--texto-suave); }
 
-.dictamen-detalle {
-  position: sticky;
-  top: 64px;
-}
-
-.total-expedientes {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--texto-suave);
-}
-
-.documento-meta {
-  margin: 4px 0;
-  font-size: 12px;
-  color: var(--texto-suave);
-}
-
-.fila-activa {
-  background: var(--verde-100) !important;
-}
-
-.dictamen-cabecera {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.dictamen-cabecera h3 {
-  margin: 0 0 4px;
-  color: var(--verde-900);
-}
-
-.dictamen-meta {
-  margin: 0;
-  color: var(--texto-suave);
-  font-size: 13px;
-}
-
-.dictamen-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.dictamen-tab {
-  border: 1px solid var(--borde);
-  background: #fff;
-  color: var(--texto-suave);
-  border-radius: 6px;
-  padding: 7px 10px;
-  cursor: pointer;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.dictamen-tab.activo {
-  background: var(--verde-700);
-  border-color: var(--verde-700);
-  color: #fff;
-}
-
-.dictamen-cuadro {
+/* Lista de expedientes como tarjetas seleccionables */
+.lista-expedientes { display: grid; gap: 8px; max-height: calc(100vh - 290px); overflow-y: auto; padding-right: 2px; }
+.expediente-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
-}
-
-.visor-documento {
-  background: var(--gris-100);
-  border: 1px solid var(--borde);
-  border-radius: 8px;
-  min-height: 420px;
-  overflow: hidden;
-}
-
-.visor-documento iframe {
-  display: block;
+  align-items: center;
   width: 100%;
-  height: 500px;
-  border: 0;
-  background: #fff;
-}
-
-.acciones-dictamen {
-  background: #fff;
+  text-align: left;
+  font: inherit;
+  background: var(--superficie);
   border: 1px solid var(--borde);
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: var(--radio-chico);
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+.expediente-item:hover { border-color: var(--verde-700); }
+.expediente-item.activo { border-color: var(--verde-700); box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15); background: var(--verde-50); }
+.expediente-item .avatar { width: 34px; height: 34px; font-size: 12px; }
+.expediente-nombre { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.expediente-meta { display: block; font-size: 12px; color: var(--texto-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.expediente-lado { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.puntos { display: flex; gap: 4px; }
+.punto { width: 9px; height: 9px; border-radius: 50%; background: var(--gris-300); }
+.punto-revision { background: #f59e0b; }
+.punto-aprobado { background: var(--verde-600); }
+.punto-observado { background: var(--rojo-700); }
 
-.acciones-dictamen h4 {
-  margin: 0 0 8px;
-  color: var(--verde-900);
-  font-size: 15px;
+/* Detalle del expediente */
+.dictamen-vacio { display: grid; place-items: center; gap: 8px; min-height: 420px; text-align: center; color: var(--texto-suave); }
+.dictamen-vacio .icono { width: 40px; height: 40px; color: var(--verde-700); }
+.dictamen-cabecera { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+.dictamen-cabecera h3 { margin: 0; font-size: 18px; }
+.dictamen-meta { margin: 2px 0 0; color: var(--texto-suave); font-size: 13px; }
+.dictamen-tabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; border-bottom: 1px solid var(--borde); }
+.dictamen-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--texto-suave);
+  padding: 8px 10px 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
 }
+.dictamen-tab.activo { color: var(--verde-900); border-bottom-color: var(--verde-700); font-weight: 600; }
+.dictamen-tab .punto { width: 8px; height: 8px; }
 
-.acciones-dictamen .campo {
-  margin-bottom: 10px;
+.dictamen-cuadro { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; align-items: start; }
+/* Sin min-width 0 el lienzo del PDF ensancha la cuadricula y la pagina. */
+.dictamen-cuadro > * { min-width: 0; }
+.acciones-dictamen {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  background: #fbfcfb;
 }
-
-.acciones-dictamen textarea {
-  min-height: 120px;
-}
-
+.acciones-dictamen h4 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.acciones-dictamen .campo textarea { min-height: 120px; }
+.acciones-dictamen .formulario-acciones { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.documento-meta { margin: 0; font-size: 12px; color: var(--texto-suave); }
 .observacion-previa {
-  background: var(--rojo-100);
+  background: var(--rojo-50);
+  border: 1px solid #f3b4b4;
   color: var(--rojo-700);
-  border-radius: 6px;
-  padding: 9px 11px;
+  border-radius: var(--radio-chico);
+  padding: 10px 12px;
   font-size: 13px;
-  margin: 10px 0;
   white-space: pre-wrap;
 }
+.nota-dictamen { margin: 0; color: var(--texto-suave); font-size: 13px; }
+.dictamen-final { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: var(--radio-chico); background: var(--verde-50); color: var(--verde-900); font-size: 13px; }
 
-.nota-dictamen {
-  color: var(--texto-suave);
-  font-size: 13px;
+@media (max-width: 1180px) {
+  .dictamen-cuadro { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .dictamen-layout { grid-template-columns: minmax(0, 1fr); }
+  .dictamen-detalle { position: static; }
+  .lista-expedientes { max-height: 360px; }
 }
 
-@media (max-width: 980px) {
-  .dictamen-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .dictamen-detalle {
-    position: static;
-  }
-
-  .dictamen-cuadro {
-    grid-template-columns: 1fr;
-  }
-
-  .visor-documento iframe {
-    height: 380px;
-  }
-}
-<style>
+.historial-estudiante { min-height: 240px; padding: 4px 2px; max-height: calc(100vh - 260px); overflow-y: auto; }

@@ -59,20 +59,71 @@ const DOMINIO_ESTUDIANTE = '@alumno.utpuebla.edu.mx';
 const TIPOS_DOCUMENTO = ['CURP', 'Acta de nacimiento', 'Certificado'];
 
 // Formatos de archivo aceptados en la carga (RF-09).
-const FORMATOS_ARCHIVO = ['PDF', 'JPG', 'PNG'];
+// CURP, Acta de nacimiento y Certificado se aceptan solo en PDF. Cualquier
+// otro valor en la hoja Configuracion se ignora y el panel no permite guardarlo.
+const FORMATOS_ARCHIVO = ['PDF'];
 
 // Rango permitido del tamano maximo de archivo en megabytes (RF-10).
 const RANGO_TAMANIO_ARCHIVO_MB = { MINIMO: 2, MAXIMO: 5 };
 
-// Claves y valores por defecto de la hoja Configuracion (RF-26).
-const CONFIGURACION_PREDETERMINADA = {
-  TAMANIO_MAXIMO_ARCHIVO_MB: '5',
-  TIPOS_PERMITIDOS: 'PDF,JPG,PNG',
-  GENERACION_ACTIVA: '2026'
+// Plantillas de correo predeterminadas (RF-29). Los marcadores {{clave}}
+// se sustituyen al enviar; el Administrador puede editarlas en su panel.
+const PLANTILLAS_CORREO_PREDETERMINADAS = {
+  ASUNTO_CORREO_OBSERVADO: 'Documento observado - Dictaminación UTP {{generacion}}',
+  PLANTILLA_CORREO_OBSERVADO: [
+    'Hola {{nombre}}:',
+    '',
+    'Tu documento "{{documento}}" fue observado durante la revisión de tu expediente (matrícula {{matricula}}).',
+    '',
+    'Observación del dictaminador:',
+    '{{observacion}}',
+    '',
+    'Ingresa al sistema para corregir o volver a cargar el documento.',
+    '',
+    'Dictaminado por: {{dictaminador}}',
+    'Universidad Tecnológica de Puebla'
+  ].join('\n'),
+  ASUNTO_CORREO_COMPLETO: 'Expediente completo - Dictaminación UTP {{generacion}}',
+  PLANTILLA_CORREO_COMPLETO: [
+    'Hola {{nombre}}:',
+    '',
+    'Tu expediente de nuevo ingreso (matrícula {{matricula}}) quedó completo y todos tus documentos fueron aprobados.',
+    '',
+    'Ya no necesitas realizar ninguna acción en el sistema.',
+    '',
+    'Universidad Tecnológica de Puebla'
+  ].join('\n')
 };
+
+// Claves de configuracion de las plantillas de correo (RF-29).
+const CLAVES_PLANTILLAS_CORREO = Object.keys(PLANTILLAS_CORREO_PREDETERMINADAS);
+
+// Claves y valores por defecto de la hoja Configuracion (RF-26 y RF-29).
+const CONFIGURACION_PREDETERMINADA = Object.assign({
+  TAMANIO_MAXIMO_ARCHIVO_MB: '5',
+  TIPOS_PERMITIDOS: 'PDF',
+  GENERACION_ACTIVA: '2026'
+}, PLANTILLAS_CORREO_PREDETERMINADAS);
 
 // Claves validas de configuracion (RF-26).
 const CLAVES_CONFIGURACION = Object.keys(CONFIGURACION_PREDETERMINADA);
+
+// Marcadores que acepta cada plantilla; uno distinto se rechaza al guardar
+// para que el estudiante nunca reciba un {{texto}} sin sustituir.
+const MARCADORES_PLANTILLA = {
+  ASUNTO_CORREO_OBSERVADO: ['nombre', 'matricula', 'documento', 'generacion'],
+  PLANTILLA_CORREO_OBSERVADO: ['nombre', 'matricula', 'documento', 'observacion', 'dictaminador', 'generacion'],
+  ASUNTO_CORREO_COMPLETO: ['nombre', 'matricula', 'generacion'],
+  PLANTILLA_CORREO_COMPLETO: ['nombre', 'matricula', 'generacion']
+};
+
+// Longitudes maximas de las plantillas de correo (RNF-06).
+const LONGITUD_MAXIMA_ASUNTO_CORREO = 150;
+const LONGITUD_MAXIMA_CUERPO_CORREO = 3000;
+
+// Minimo de correos disponibles en la cuota diaria de MailApp para intentar
+// un envio; por debajo se omite y se registra el motivo (RNF-10).
+const CUOTA_MINIMA_CORREOS = 1;
 
 // Prefijos de los identificadores unicos (seccion 6).
 const PREFIJOS_ID = {
@@ -83,6 +134,31 @@ const PREFIJOS_ID = {
 // Cantidad de registros por pagina del historial (RF-24).
 const LIMITE_PAGINA_HISTORIAL = 50;
 
+// Registros mas recientes que se muestran en el historial de un alumno y en
+// la actividad de un usuario; el historial completo lo consulta el Administrador.
+const LIMITE_HISTORIAL_ESTUDIANTE = 100;
+const LIMITE_ACTIVIDAD_USUARIO = 100;
+
+// Umbral para cambiar de lecturas fila por fila a una lectura completa.
+const MAXIMO_LECTURAS_INDIVIDUALES = 20;
+
+// Nombre con el que el estudiante ve las acciones del personal en su historial.
+const NOMBRE_PERSONAL_PARA_ESTUDIANTE = 'Servicios Escolares';
+
+// Sesion de la app sobre la identidad de Google. CacheService admite como
+// maximo 6 horas; cada accion renueva el plazo, asi que expira por inactividad.
+const DURACION_SESION_SEGUNDOS = 2 * 60 * 60;
+const PREFIJO_CACHE_SESION = 'sesion_';
+
+// Acciones del parametro ?accion= que entiende doGet (inicio y cierre de sesion).
+const ACCIONES_SESION = {
+  INGRESAR: 'ingresar',
+  SALIR: 'salir'
+};
+
+// Pagina de Google para elegir otra cuenta sin cerrar las demas.
+const URL_CAMBIAR_CUENTA_GOOGLE = 'https://accounts.google.com/AccountChooser?continue=';
+
 // Espera maxima del LockService en milisegundos (RNF-03).
 const TIEMPO_ESPERA_BLOQUEO_MS = 30000;
 
@@ -92,6 +168,19 @@ const PROPIEDAD_CARPETA_RAIZ_DRIVE = 'UTP_DICTAMEN_CARPETA_RAIZ_ID';
 const NOMBRE_CARPETA_RAIZ_DRIVE = 'Dictaminacion UTP - Nuevo ingreso';
 const CARPETA_SIN_GENERACION = 'Sin generacion';
 const CARPETA_SIN_CARRERA = 'Sin carrera';
+
+// Creacion de carpetas por estudiante (RF-32). Al importar se usa un plazo
+// corto para no hacer esperar al Administrador; lo que falte lo termina un
+// activador en segundo plano con un plazo menor al limite de 6 minutos (RNF-04).
+const TIEMPO_CARPETAS_IMPORTACION_MS = 45 * 1000;
+const TIEMPO_CARPETAS_SEGUNDO_PLANO_MS = 4 * 60 * 1000;
+const ESPERA_ACTIVADOR_CARPETAS_MS = 60 * 1000;
+const FUNCION_CONTINUAR_CARPETAS = 'continuarCreacionCarpetas';
+
+// Cache del ID de la carpeta de cada matricula: evita tres busquedas en
+// Drive por cada carga de archivo (criterio de 200 cargas simultaneas).
+const PREFIJO_CACHE_CARPETA = 'carpeta_';
+const DURACION_CACHE_CARPETA_SEGUNDOS = 6 * 60 * 60;
 
 // Conversion de unidades para validar el tamano maximo (RF-10).
 const BYTES_POR_MEGABYTE = 1024 * 1024;
@@ -107,10 +196,6 @@ const ESTATUS_RECHAZADO_ALIAS = 'Rechazado';
 
 // Longitud maxima de una observacion de dictamen (RNF-06).
 const LONGITUD_MAXIMA_OBSERVACION = 1000;
-
-// Asuntos de las notificaciones automaticas (RF-27 y RF-28).
-const ASUNTO_CORREO_OBSERVADO = 'Documento observado - Dictaminacion UTP 2026';
-const ASUNTO_CORREO_EXPEDIENTE_COMPLETO = 'Expediente completo - Dictaminacion UTP 2026';
 
 // Tipo MIME de cada formato aceptado (RF-09).
 const TIPOS_MIME_ARCHIVO = {

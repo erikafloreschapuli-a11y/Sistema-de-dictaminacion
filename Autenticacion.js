@@ -95,7 +95,7 @@ function esUsuarioActivo(valor) {
 
 /**
  * Devuelve el usuario de la sesion aplicando la matriz de dominios:
- * - @alumno.utpuebla.edu.mx: Estudiante.
+ * - @alumno.utpuebla.edu.mx: Estudiante, solo si esta en la hoja Estudiantes.
  * - @utpuebla.edu.mx: Administrador o Dictaminador registrado y activo.
  * - Cualquier otro dominio: rechazado.
  */
@@ -103,9 +103,18 @@ function obtenerUsuarioActual() {
   const correo = obtenerCorreoUsuario();
 
   if (esCorreoEstudiante(correo)) {
+    // Solo entra quien el Administrador importo en la lista de nuevo ingreso.
+    const estudiante = buscarPorClave(HOJAS.ESTUDIANTES, 'correo_institucional', correo);
+    if (!estudiante) {
+      throw crearError(
+        'NO_REGISTRADO',
+        'Tu correo institucional no aparece en la lista de estudiantes de nuevo ingreso. ' +
+        'Si crees que es un error, acude a Servicios Escolares.'
+      );
+    }
     return {
       correo: correo,
-      nombre: correo.split('@')[0],
+      nombre: String(estudiante.nombre || correo.split('@')[0]),
       rol: ROLES.ESTUDIANTE,
       activo: true
     };
@@ -153,6 +162,7 @@ function obtenerUsuarioActual() {
  */
 function asegurarRol(rolesPermitidos) {
   const usuario = obtenerUsuarioActual();
+  asegurarSesionActiva(usuario.correo);
   if (usuario.rol === ROLES.ADMINISTRADOR) {
     return usuario;
   }
@@ -161,6 +171,50 @@ function asegurarRol(rolesPermitidos) {
     throw crearError('AUTORIZACION', 'Tu rol (' + usuario.rol + ') no tiene permiso para esta accion.');
   }
   return usuario;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sesion de la aplicacion                                             */
+/* ------------------------------------------------------------------ */
+// Google ya verifico la identidad; la sesion solo registra que la persona
+// paso por la pantalla de inicio y permite cerrarla sin salir de Google.
+
+function obtenerClaveSesion(correo) {
+  return PREFIJO_CACHE_SESION + normalizarCorreo(correo);
+}
+
+/**
+ * Abre o renueva la sesion del correo por DURACION_SESION_SEGUNDOS.
+ */
+function iniciarSesion(correo) {
+  CacheService.getScriptCache().put(obtenerClaveSesion(correo), String(Date.now()), DURACION_SESION_SEGUNDOS);
+}
+
+function cerrarSesion(correo) {
+  CacheService.getScriptCache().remove(obtenerClaveSesion(correo));
+}
+
+function tieneSesionActiva(correo) {
+  return Boolean(CacheService.getScriptCache().get(obtenerClaveSesion(correo)));
+}
+
+/**
+ * Exige sesion abierta en cada llamada al servidor y renueva su plazo,
+ * para que la expiracion cuente desde la ultima actividad.
+ */
+function asegurarSesionActiva(correo) {
+  if (!tieneSesionActiva(correo)) {
+    throw crearError('SESION', 'Tu sesión terminó. Vuelve a iniciar sesión para continuar.');
+  }
+  iniciarSesion(correo);
+}
+
+/**
+ * URL publica de la app; los enlaces deben ser absolutos porque la vista
+ * corre dentro de un iframe de googleusercontent.com.
+ */
+function obtenerUrlApp() {
+  return ScriptApp.getService().getUrl();
 }
 
 /**

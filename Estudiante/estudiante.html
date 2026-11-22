@@ -4,36 +4,82 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mi expediente - Dictaminacion UTP 2026</title>
+  <title>Mi expediente - Dictaminación UTP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <style>
     <?!= include('estilos') ?>
     <?!= include('Estudiante/estudianteStyle') ?>
   </style>
 </head>
-<body>
+<body data-url-app="<?= cabecera.urlApp ?>">
   <header class="cabecera">
     <div class="cabecera-contenido">
-      <div>
-        <p class="cabecera-institucion">Universidad Tecnologica de Puebla</p>
-        <h1>Mi expediente - Nuevo ingreso 2026</h1>
+      <div class="marca">
+        <div class="marca-logo">UTP</div>
+        <div>
+          <p class="cabecera-institucion">Universidad Tecnológica de Puebla</p>
+          <h1>Mi expediente de nuevo ingreso</h1>
+        </div>
       </div>
       <div class="cabecera-usuario">
-        <span class="cabecera-nombre" id="nombre-cabecera"><?= usuario.nombre ?></span>
-        <span class="etiqueta-rol"><?= usuario.rol ?></span>
+        <div class="avatar" id="avatar-cabecera"><?= cabecera.iniciales ?></div>
+        <div class="cabecera-persona">
+          <span class="cabecera-nombre" id="nombre-cabecera"><?= usuario.nombre ?></span>
+          <span class="etiqueta-rol"><?= usuario.rol ?></span>
+        </div>
+        <a class="boton-salir" href="<?= cabecera.urlSalir ?>" target="_top"><i data-icono="salir"></i><span>Cerrar sesión</span></a>
       </div>
     </div>
   </header>
 
   <nav class="menu" aria-label="Secciones del panel">
-    <button type="button" class="menu-boton activo" data-seccion="datos">Mis datos</button>
-    <button type="button" class="menu-boton" data-seccion="documentos">Mis documentos</button>
+    <button type="button" class="menu-boton activo" data-seccion="documentos"><i data-icono="documento"></i>Mis documentos</button>
+    <button type="button" class="menu-boton" data-seccion="historial"><i data-icono="historial"></i>Historial</button>
+    <button type="button" class="menu-boton" data-seccion="datos"><i data-icono="persona"></i>Mis datos</button>
   </nav>
 
   <main class="contenedor">
 
+    <!-- RF-09 a RF-14: carga y seguimiento de documentos -->
+    <section id="seccion-documentos" class="seccion">
+      <div class="panel bienvenida">
+        <div>
+          <h2 id="saludo">Hola</h2>
+          <p>Sube cada documento y revisa aquí su estatus. Te avisaremos por correo si alguno necesita corrección.</p>
+          <div class="avance">
+            <div class="avance-texto"><span>Avance de tu expediente</span><strong id="avance-texto">0 de 3 aprobados</strong></div>
+            <div class="avance-barra"><div class="avance-relleno" id="avance-relleno" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="bienvenida-estatus">
+          <span id="estatus-general"></span>
+          <small>Estatus del expediente</small>
+        </div>
+      </div>
+
+      <div class="documentos-grid" id="contenedor-documentos">
+        <p class="cargando">Cargando documentos...</p>
+      </div>
+    </section>
+
+    <!-- Historial del expediente del estudiante (solo lectura) -->
+    <section id="seccion-historial" class="seccion" hidden>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Historial de mi expediente</h2>
+        <p class="seccion-descripcion">Cada vez que subes un documento o Servicios Escolares lo revisa, queda registrado aquí.</p>
+      </div>
+      <div class="panel" id="contenedor-historial">
+        <p class="cargando">Cargando historial...</p>
+      </div>
+    </section>
+
     <!-- RF-07 y RF-08: datos del estudiante -->
-    <section id="seccion-datos" class="seccion">
-      <h2 class="seccion-titulo">Mis datos <span class="rf">RF-07</span></h2>
+    <section id="seccion-datos" class="seccion" hidden>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Mis datos</h2>
+        <p class="seccion-descripcion">Información registrada por Servicios Escolares. Solo puedes actualizar tus datos de contacto.</p>
+      </div>
 
       <div class="panel">
         <div class="datos-grid" id="datos-estudiante">
@@ -42,10 +88,11 @@
       </div>
 
       <div class="panel">
-        <h3>Actualizar datos de contacto <span class="rf">RF-08</span></h3>
+        <h3>Datos de contacto</h3>
+        <p class="panel-descripcion">Los usamos para comunicarnos contigo si hay algún problema con tu expediente.</p>
         <form id="form-datos" class="formulario">
-          <label class="campo">Telefono
-            <input type="tel" id="campo-telefono" maxlength="20" placeholder="2221234567">
+          <label class="campo">Teléfono
+            <input type="tel" id="campo-telefono" maxlength="20" placeholder="2221234567" inputmode="tel">
           </label>
           <label class="campo">Correo personal
             <input type="email" id="campo-correo-personal" maxlength="120" placeholder="correo@ejemplo.com">
@@ -57,36 +104,39 @@
       </div>
     </section>
 
-    <!-- RF-09 a RF-14: carga y seguimiento de documentos -->
-    <section id="seccion-documentos" class="seccion" hidden>
-      <h2 class="seccion-titulo">Mis documentos <span class="rf">RF-09 a RF-14</span></h2>
-      <p class="resumen-expediente" id="resumen-expediente">Cargando...</p>
-      <div class="documentos-grid" id="contenedor-documentos">
-        <p class="cargando">Cargando documentos...</p>
-      </div>
-    </section>
-
   </main>
+
+  <!-- Visor del archivo cargado -->
+  <div class="modal" id="modal-visor" hidden>
+    <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="titulo-visor">
+      <div class="modal-cabecera">
+        <h3 id="titulo-visor">Documento</h3>
+        <button type="button" class="visor-boton" id="boton-cerrar-visor" title="Cerrar"><i data-icono="cerrar"></i></button>
+      </div>
+      <div class="modal-cuerpo" id="contenedor-visor"></div>
+    </div>
+  </div>
 
   <div id="aviso-global" class="aviso" hidden></div>
 
-  
-    <?!= include('scripts') ?>
-  
+  <?!= include('scripts') ?>
+  <?!= include('visor') ?>
+
   <script>
     // Estado del panel: datos y configuracion vigentes en el servidor.
     const estadoPagina = {
       estudiante: null,
       documentos: [],
       configuracion: null,
+      historialCargado: false,
       cargando: false
     };
 
-    const CLASE_ESTATUS = {
-      'Pendiente': 'estado-pendiente',
-      'En Revision': 'estado-revision',
-      'Aprobado': 'estado-aprobado',
-      'Observado': 'estado-observado'
+    const ESTATUS = {
+      PENDIENTE: 'Pendiente',
+      EN_REVISION: 'En Revision',
+      APROBADO: 'Aprobado',
+      OBSERVADO: 'Observado'
     };
 
     const BORDE_ESTATUS = {
@@ -96,6 +146,22 @@
       'Observado': 'borde-observado'
     };
 
+    const ICONO_ESTATUS = {
+      'Pendiente': 'subir',
+      'En Revision': 'reloj',
+      'Aprobado': 'check',
+      'Observado': 'alerta'
+    };
+
+    const MENSAJE_ESTATUS = {
+      'Pendiente': 'Aún no has cargado este documento.',
+      'En Revision': 'Servicios Escolares está revisando tu documento.',
+      'Aprobado': 'Tu documento fue aprobado. No necesitas hacer nada más.',
+      'Observado': 'Tu documento necesita corrección. Revisa la observación y vuelve a subirlo.'
+    };
+
+    const BYTES_POR_MEGABYTE = 1024 * 1024;
+
     document.addEventListener('DOMContentLoaded', function () {
       document.querySelectorAll('.menu-boton').forEach(function (boton) {
         boton.addEventListener('click', function () {
@@ -103,8 +169,24 @@
         });
       });
 
+      const contenedor = document.getElementById('contenedor-documentos');
       document.getElementById('form-datos').addEventListener('submit', actualizarDatos);
-      document.getElementById('contenedor-documentos').addEventListener('click', manejarAccionDocumento);
+      contenedor.addEventListener('click', manejarAccionDocumento);
+      contenedor.addEventListener('change', manejarSeleccionArchivo);
+      contenedor.addEventListener('dragover', manejarArrastre);
+      contenedor.addEventListener('dragleave', manejarArrastre);
+      contenedor.addEventListener('drop', manejarSoltarArchivo);
+      document.getElementById('boton-cerrar-visor').addEventListener('click', cerrarVisor);
+      document.getElementById('modal-visor').addEventListener('click', function (evento) {
+        if (evento.target.id === 'modal-visor') {
+          cerrarVisor();
+        }
+      });
+      document.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Escape') {
+          cerrarVisor();
+        }
+      });
 
       cargarExpediente();
     });
@@ -118,6 +200,27 @@
       document.querySelectorAll('.seccion').forEach(function (seccion) {
         seccion.hidden = seccion.id !== 'seccion-' + nombre;
       });
+      if (nombre === 'historial' && !estadoPagina.historialCargado) {
+        cargarHistorial();
+      }
+    }
+
+    /* ---------------- Historial del expediente ---------------- */
+
+    async function cargarHistorial() {
+      const contenedor = document.getElementById('contenedor-historial');
+      estadoPagina.historialCargado = true;
+      contenedor.innerHTML = '<p class="cargando">Cargando historial...</p>';
+      try {
+        const respuesta = await api('apiObtenerMiHistorial');
+        contenedor.innerHTML = renderLineaTiempo(respuesta.registros, {
+          mostrarUsuario: true,
+          vacio: 'Aún no hay movimientos. Cuando subas tu primer documento aparecerá aquí.'
+        });
+      } catch (error) {
+        estadoPagina.historialCargado = false;
+        contenedor.innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+      }
     }
 
     /* ---------------- RF-07: consulta del expediente ---------------- */
@@ -127,13 +230,13 @@
         return;
       }
       estadoPagina.cargando = true;
-      document.getElementById('contenedor-documentos').innerHTML = '<p class="cargando">Cargando documentos...</p>';
       try {
         const respuesta = await api('apiObtenerMiExpediente');
         estadoPagina.estudiante = respuesta.estudiante;
         estadoPagina.documentos = respuesta.documentos;
         estadoPagina.configuracion = respuesta.configuracion;
         renderDatos();
+        renderResumen();
         renderDocumentos();
       } catch (error) {
         const mensaje = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
@@ -150,11 +253,10 @@
       document.getElementById('nombre-cabecera').textContent = estudiante.nombre || 'Estudiante';
       document.getElementById('datos-estudiante').innerHTML = [
         crearDato('Nombre', estudiante.nombre),
-        crearDato('Matricula', estudiante.matricula),
+        crearDato('Matrícula', estudiante.matricula),
         crearDato('Carrera', estudiante.carrera),
-        crearDato('Generacion', estudiante.generacion),
-        crearDato('Correo institucional', estudiante.correo_institucional),
-        crearDato('Estatus general', estudiante.estatus_general)
+        crearDato('Generación', estudiante.generacion),
+        crearDato('Correo institucional', estudiante.correo_institucional)
       ].join('');
       document.getElementById('campo-telefono').value = estudiante.telefono || '';
       document.getElementById('campo-correo-personal').value = estudiante.correo_personal || '';
@@ -166,6 +268,21 @@
         '<p class="dato-etiqueta">' + escapeHtml(etiqueta) + '</p>' +
         '<p class="dato-valor">' + escapeHtml(texto) + '</p>' +
         '</div>';
+    }
+
+    function renderResumen() {
+      const estudiante = estadoPagina.estudiante;
+      const documentos = estadoPagina.documentos || [];
+      const aprobados = documentos.filter(function (documento) {
+        return documento.estatus === ESTATUS.APROBADO;
+      }).length;
+      const total = documentos.length || 1;
+      const primerNombre = String(estudiante.nombre || '').split(' ')[0];
+
+      document.getElementById('saludo').textContent = primerNombre ? 'Hola, ' + primerNombre : 'Hola';
+      document.getElementById('avance-texto').textContent = aprobados + ' de ' + documentos.length + ' aprobados';
+      document.getElementById('avance-relleno').style.width = Math.round((aprobados / total) * 100) + '%';
+      document.getElementById('estatus-general').innerHTML = crearEtiquetaEstatus(estudiante.estatus_general || ESTATUS.PENDIENTE);
     }
 
     /* ---------------- RF-08: actualizacion de contacto ---------------- */
@@ -182,7 +299,7 @@
         estadoPagina.estudiante = respuesta.estudiante;
         renderDatos();
         mostrarAviso(
-          respuesta.sinCambios ? 'No habia cambios por guardar.' : 'Datos actualizados correctamente.',
+          respuesta.sinCambios ? 'No había cambios por guardar.' : 'Datos actualizados correctamente.',
           'ok'
         );
       } catch (error) {
@@ -197,13 +314,6 @@
     function renderDocumentos() {
       const contenedor = document.getElementById('contenedor-documentos');
       const documentos = estadoPagina.documentos || [];
-      const aprobados = documentos.filter(function (documento) {
-        return documento.estatus === 'Aprobado';
-      }).length;
-
-      document.getElementById('resumen-expediente').textContent =
-        'Documentos aprobados: ' + aprobados + ' de ' + documentos.length + '.';
-
       if (!documentos.length) {
         contenedor.innerHTML = '<p class="vacio">No hay documentos configurados.</p>';
         return;
@@ -211,49 +321,133 @@
       contenedor.innerHTML = documentos.map(renderDocumento).join('');
     }
 
-    function renderDocumento(documento) {
-      const claseEstado = CLASE_ESTATUS[documento.estatus] || 'estado-pendiente';
-      const claseBorde = BORDE_ESTATUS[documento.estatus] || 'borde-pendiente';
-      const archivo = documento.url_archivo
-        ? '<p class="documento-meta"><a href="' + escapeHtml(documento.url_archivo) + '" target="_blank" rel="noopener">Ver archivo cargado</a></p>'
-        : '';
-      const carga = documento.fecha_carga
-        ? '<p class="documento-meta">Cargado: ' + escapeHtml(formatearFechaHora(documento.fecha_carga)) + '</p>'
-        : '<p class="documento-meta">Aun no has cargado este documento.</p>';
-      const dictamen = documento.fecha_dictamen
-        ? '<p class="documento-meta">Dictaminado: ' + escapeHtml(formatearFechaHora(documento.fecha_dictamen)) +
-          (documento.dictaminador ? ' por ' + escapeHtml(documento.dictaminador) : '') + '</p>'
-        : '';
-      const observacion = documento.observaciones
-        ? '<div class="documento-observacion"><strong>Observacion del dictaminador</strong>' + escapeHtml(documento.observaciones) + '</div>'
-        : '';
-      const aceptar = (estadoPagina.configuracion && estadoPagina.configuracion.tiposPermitidos
+    function obtenerTiposPermitidos() {
+      return estadoPagina.configuracion && estadoPagina.configuracion.tiposPermitidos
         ? estadoPagina.configuracion.tiposPermitidos
-        : ['PDF', 'JPG', 'PNG']).map(function (tipo) {
-          return '.' + String(tipo).toLowerCase();
-        }).join(',');
-      const acciones = documento.puedeCargar
-        ? '<input type="file" class="documento-archivo" data-tipo="' + escapeHtml(documento.tipo_documento) + '" accept="' + escapeHtml(aceptar) + '">' +
-          '<button type="button" class="boton boton-mini" data-accion="subir" data-tipo="' + escapeHtml(documento.tipo_documento) + '">' +
-          (documento.estatus === 'Observado' ? 'Volver a subir' : 'Subir documento') +
-          '</button>'
-        : '<span class="nota-bloqueo">' + escapeHtml(documento.motivoBloqueo || 'No disponible para carga.') + '</span>';
+        : ['PDF'];
+    }
 
-      return '<article class="documento-tarjeta ' + claseBorde + '">' +
+    function obtenerTamanoMaximoMb() {
+      return Number(estadoPagina.configuracion && estadoPagina.configuracion.tamanoMaximoMb) || 5;
+    }
+
+    function renderDocumento(documento) {
+      const tipo = escapeHtml(documento.tipo_documento);
+      const claseBorde = BORDE_ESTATUS[documento.estatus] || 'borde-pendiente';
+      const fechas = [];
+      if (documento.fecha_carga) {
+        fechas.push('Cargado: ' + formatearFechaHora(documento.fecha_carga));
+      }
+      if (documento.fecha_dictamen) {
+        fechas.push('Revisado: ' + formatearFechaHora(documento.fecha_dictamen));
+      }
+      const observacion = documento.estatus === ESTATUS.OBSERVADO && documento.observaciones
+        ? '<div class="documento-observacion"><strong>' + icono('alerta') + 'Observación del dictaminador</strong>' +
+          escapeHtml(documento.observaciones) + '</div>'
+        : '';
+      const verArchivo = documento.tieneArchivo
+        ? '<button type="button" class="boton boton-mini boton-secundario" data-accion="ver" data-tipo="' + tipo + '">' +
+          icono('ojo') + 'Ver archivo</button>'
+        : '';
+
+      return '<article class="documento-tarjeta ' + claseBorde + '" data-tipo="' + tipo + '">' +
         '<div class="documento-cabecera">' +
-          '<h3>' + escapeHtml(documento.tipo_documento) + '</h3>' +
-          '<span class="estado ' + claseEstado + '">' + escapeHtml(documento.estatus) + '</span>' +
+          '<div class="documento-icono">' + icono(ICONO_ESTATUS[documento.estatus] || 'documento') + '</div>' +
+          '<h3>' + tipo + '</h3>' +
+          crearEtiquetaEstatus(documento.estatus) +
         '</div>' +
-        archivo + carga + dictamen + observacion +
-        '<div class="documento-acciones">' + acciones + '</div>' +
+        '<p class="documento-mensaje">' + escapeHtml(MENSAJE_ESTATUS[documento.estatus] || '') + '</p>' +
+        observacion +
+        (documento.puedeCargar ? renderZonaCarga(documento) : '') +
+        (fechas.length ? '<p class="documento-meta">' + escapeHtml(fechas.join(' · ')) + '</p>' : '') +
+        '<div class="documento-acciones">' + verArchivo + '</div>' +
         '</article>';
     }
 
+    function renderZonaCarga(documento) {
+      const tipo = escapeHtml(documento.tipo_documento);
+      const aceptar = obtenerTiposPermitidos().map(function (formato) {
+        return '.' + String(formato).toLowerCase();
+      }).join(',');
+      const texto = documento.estatus === ESTATUS.OBSERVADO ? 'Sube el documento corregido' : 'Arrastra tu archivo aquí';
+      return '<label class="zona-carga">' +
+          '<input type="file" class="documento-archivo" data-tipo="' + tipo + '" accept="' + escapeHtml(aceptar) + '">' +
+          icono('subir') +
+          '<strong class="zona-titulo">' + texto + '</strong>' +
+          '<span class="zona-detalle">o haz clic para elegirlo · ' + escapeHtml(obtenerTiposPermitidos().join(', ')) +
+            ' · máx. ' + obtenerTamanoMaximoMb() + ' MB</span>' +
+        '</label>' +
+        '<button type="button" class="boton boton-bloque" data-accion="subir" data-tipo="' + tipo + '" disabled>' +
+          icono('subir') + (documento.estatus === ESTATUS.OBSERVADO ? 'Volver a subir' : 'Subir documento') +
+        '</button>';
+    }
+
     function manejarAccionDocumento(evento) {
-      const boton = evento.target.closest('button[data-accion="subir"]');
-      if (boton) {
-        subirDocumento(boton);
+      const boton = evento.target.closest('button[data-accion]');
+      if (!boton) {
+        return;
       }
+      if (boton.dataset.accion === 'subir') {
+        subirDocumento(boton);
+      } else if (boton.dataset.accion === 'ver') {
+        abrirVisor(boton.dataset.tipo);
+      }
+    }
+
+    /* ---------------- Seleccion y arrastre del archivo ---------------- */
+
+    function manejarSeleccionArchivo(evento) {
+      if (evento.target.classList.contains('documento-archivo')) {
+        mostrarArchivoElegido(evento.target);
+      }
+    }
+
+    function manejarArrastre(evento) {
+      const zona = evento.target.closest('.zona-carga');
+      if (!zona) {
+        return;
+      }
+      evento.preventDefault();
+      zona.classList.toggle('arrastrando', evento.type === 'dragover');
+    }
+
+    function manejarSoltarArchivo(evento) {
+      const zona = evento.target.closest('.zona-carga');
+      if (!zona) {
+        return;
+      }
+      evento.preventDefault();
+      zona.classList.remove('arrastrando');
+      const entrada = zona.querySelector('.documento-archivo');
+      if (evento.dataTransfer && evento.dataTransfer.files.length) {
+        entrada.files = evento.dataTransfer.files;
+        mostrarArchivoElegido(entrada);
+      }
+    }
+
+    /**
+     * Valida en cuanto se elige el archivo para avisar antes de subirlo (RF-10).
+     */
+    function mostrarArchivoElegido(entrada) {
+      const tarjeta = entrada.closest('.documento-tarjeta');
+      const zona = entrada.closest('.zona-carga');
+      const boton = tarjeta.querySelector('button[data-accion="subir"]');
+      const archivo = entrada.files && entrada.files[0];
+      if (!archivo) {
+        return;
+      }
+      const errorValidacion = validarArchivoCliente(archivo);
+      if (errorValidacion) {
+        mostrarAviso(errorValidacion, 'error');
+        entrada.value = '';
+        zona.classList.remove('con-archivo');
+        boton.disabled = true;
+        return;
+      }
+      zona.classList.add('con-archivo');
+      zona.querySelector('.zona-titulo').textContent = archivo.name;
+      zona.querySelector('.zona-detalle').textContent = (archivo.size / BYTES_POR_MEGABYTE).toFixed(2) + ' MB · haz clic para cambiarlo';
+      boton.disabled = false;
     }
 
     async function subirDocumento(boton) {
@@ -275,6 +469,7 @@
       }
 
       marcarCargando(boton, true);
+      boton.textContent = 'Subiendo...';
       try {
         const contenidoBase64 = await leerArchivoBase64(archivo);
         await api('apiSubirDocumento', {
@@ -283,10 +478,9 @@
           tipoMime: archivo.type,
           contenidoBase64: contenidoBase64
         });
-        mostrarAviso('Documento "' + tipoDocumento + '" cargado. Estatus: En Revision.', 'ok');
-        entrada.value = '';
+        mostrarAviso('Documento "' + tipoDocumento + '" cargado. Ahora está en revisión.', 'ok');
+        estadoPagina.historialCargado = false;
         await cargarExpediente();
-        cambiarSeccion('documentos');
       } catch (error) {
         mostrarAviso(error.message, 'error');
         marcarCargando(boton, false);
@@ -294,19 +488,18 @@
     }
 
     function validarArchivoCliente(archivo) {
-      const configuracion = estadoPagina.configuracion || {};
-      const tiposPermitidos = configuracion.tiposPermitidos || ['PDF', 'JPG', 'PNG'];
-      const tamanoMaximoMb = Number(configuracion.tamanoMaximoMb) || 5;
+      const tiposPermitidos = obtenerTiposPermitidos();
+      const tamanoMaximoMb = obtenerTamanoMaximoMb();
       const extension = obtenerExtension(archivo.name);
 
       if (!archivo.size) {
-        return 'El archivo esta vacio.';
+        return 'El archivo está vacío.';
       }
       if (tiposPermitidos.indexOf(extension) === -1) {
         return 'Formato no permitido. Solo se aceptan: ' + tiposPermitidos.join(', ') + '.';
       }
-      if (archivo.size > tamanoMaximoMb * 1024 * 1024) {
-        return 'El archivo supera el tamano maximo de ' + tamanoMaximoMb + ' MB.';
+      if (archivo.size > tamanoMaximoMb * BYTES_POR_MEGABYTE) {
+        return 'El archivo supera el tamaño máximo de ' + tamanoMaximoMb + ' MB.';
       }
       return '';
     }
@@ -329,6 +522,31 @@
         };
         lector.readAsDataURL(archivo);
       });
+    }
+
+    /* ---------------- Visor del archivo cargado ---------------- */
+
+    function abrirVisor(tipoDocumento) {
+      const documento = (estadoPagina.documentos || []).find(function (item) {
+        return item.tipo_documento === tipoDocumento;
+      });
+      if (!documento) {
+        return;
+      }
+      document.getElementById('titulo-visor').textContent = tipoDocumento;
+      document.getElementById('modal-visor').hidden = false;
+      mostrarVisor(document.getElementById('contenedor-visor'), {
+        matricula: estadoPagina.estudiante.matricula,
+        tipoDocumento: tipoDocumento,
+        version: documento.fecha_carga
+      });
+    }
+
+    function cerrarVisor() {
+      const contenedor = document.getElementById('contenedor-visor');
+      contenedor.turnoVisor = null;
+      contenedor.innerHTML = '';
+      document.getElementById('modal-visor').hidden = true;
     }
   </script>
 </body>

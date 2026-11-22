@@ -123,7 +123,7 @@ function apiDictaminarDocumento(datos) {
         observacion: observacion || (estatusNuevo === ESTATUS_DOCUMENTO.APROBADO ? 'Documento aprobado' : '')
       });
 
-      const expediente = construirExpedientes([estudiante], leerHoja(HOJAS.DOCUMENTOS))[0];
+      const expediente = actualizarEstatusGeneral(estudiante);
       return {
         estudiante: estudiante,
         documento: documentoActualizado,
@@ -131,27 +131,18 @@ function apiDictaminarDocumento(datos) {
       };
     });
 
-    let notificado = false;
+    const expedienteCompleto = resultado.expediente.estatus === ESTATUS_EXPEDIENTE.COMPLETO;
+    let notificacion = null;
     if (estatusNuevo === ESTATUS_DOCUMENTO.OBSERVADO) {
-      notificado = notificarDocumentoObservado(resultado.estudiante, tipoDocumento, observacion, usuario);
-    } else if (resultado.expediente.estatus === ESTATUS_EXPEDIENTE.COMPLETO) {
-      notificado = notificarExpedienteCompleto(resultado.estudiante);
+      notificacion = notificarDocumentoObservado(resultado.estudiante, tipoDocumento, observacion, usuario);
+    } else if (expedienteCompleto) {
+      notificacion = notificarExpedienteCompleto(resultado.estudiante);
     }
-
-    const mensaje = estatusNuevo === ESTATUS_DOCUMENTO.APROBADO
-      ? (resultado.expediente.estatus === ESTATUS_EXPEDIENTE.COMPLETO
-        ? (notificado
-          ? 'Documento aprobado. El expediente quedo completo y se notifico al estudiante.'
-          : 'Documento aprobado. El expediente quedo completo, pero no se pudo enviar el correo.')
-        : 'Documento aprobado.')
-      : (notificado
-        ? 'Documento observado. Se notifico al estudiante.'
-        : 'Documento observado. No se pudo enviar el correo; revisa la cuota de MailApp.');
 
     return {
       ok: true,
-      mensaje: mensaje,
-      notificado: notificado,
+      mensaje: construirMensajeDictamen(estatusNuevo, expedienteCompleto, notificacion),
+      notificado: Boolean(notificacion && notificacion.enviado),
       documento: convertirDocumentoDictamen(resultado.documento, tipoDocumento),
       expediente: resultado.expediente
     };
@@ -161,6 +152,55 @@ function apiDictaminarDocumento(datos) {
 /* ------------------------------------------------------------------ */
 /* Construccion de expedientes para la vista                          */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Arma el mensaje para el dictaminador, incluyendo por que no salio el
+ * correo cuando falla, para que pueda avisar al estudiante por otro medio.
+ */
+function construirMensajeDictamen(estatusNuevo, expedienteCompleto, notificacion) {
+  const motivo = notificacion && !notificacion.enviado ? ' No se envió el correo: ' + notificacion.motivo : '';
+  if (estatusNuevo === ESTATUS_DOCUMENTO.OBSERVADO) {
+    return motivo ? 'Documento observado.' + motivo : 'Documento observado. Se notificó al estudiante.';
+  }
+  if (!expedienteCompleto) {
+    return 'Documento aprobado.';
+  }
+  return motivo
+    ? 'Documento aprobado. El expediente quedó completo.' + motivo
+    : 'Documento aprobado. El expediente quedó completo y se notificó al estudiante.';
+}
+
+/**
+ * Recalcula el estatus del expediente y lo guarda en la columna
+ * estatus_general, para que la hoja Estudiantes refleje el avance sin abrir
+ * la app. Requiere lock activo: se llama despues de cada carga o dictamen.
+ */
+function actualizarEstatusGeneral(estudiante, documentosLeidos) {
+  const documentos = documentosLeidos || leerHoja(HOJAS.DOCUMENTOS);
+  const expediente = construirExpedientes([estudiante], documentos)[0];
+  if (String(estudiante.estatus_general || '') !== expediente.estatus) {
+    actualizarRegistro(HOJAS.ESTUDIANTES, estudiante._fila, { estatus_general: expediente.estatus });
+  }
+  return expediente;
+}
+
+/**
+ * Recalcula estatus_general de todos los estudiantes en una sola escritura.
+ * Se ejecuta a mano desde el editor de Apps Script para corregir datos
+ * importados antes de que existiera el calculo automatico.
+ */
+function recalcularEstatusGenerales() {
+  return conBloqueoEscritura(function () {
+    const estudiantes = leerHoja(HOJAS.ESTUDIANTES);
+    const expedientes = construirExpedientes(estudiantes, leerHoja(HOJAS.DOCUMENTOS));
+    const estatus = expedientes.map(function (expediente) {
+      return expediente.estatus;
+    });
+    escribirColumna(HOJAS.ESTUDIANTES, 'estatus_general', estatus);
+    console.log('estatus_general recalculado para ' + estatus.length + ' estudiantes.');
+    return { ok: true, actualizados: estatus.length };
+  });
+}
 
 /**
  * Agrupa estudiantes y documentos en la estructura que consume el panel.
@@ -237,12 +277,12 @@ function construirExpedienteParaVista(estudiante, documentos) {
 function convertirDocumentoDictamen(registro, tipoDocumento) {
   const fila = registro || {};
   const estatus = normalizarEstatusDocumento(fila.estatus);
+  // La URL de Drive no viaja al navegador: el visor pide el archivo a apiObtenerArchivo.
   const urlArchivo = String(fila.url_archivo || '');
   return {
     id_documento: String(fila.id_documento || ''),
     tipo_documento: String(fila.tipo_documento || tipoDocumento || ''),
-    url_archivo: urlArchivo,
-    url_vista_previa: construirUrlVistaPrevia(urlArchivo),
+    tieneArchivo: Boolean(urlArchivo),
     estatus: estatus,
     observaciones: String(fila.observaciones === undefined || fila.observaciones === null ? '' : fila.observaciones).trim(),
     fecha_carga: convertirFechaTexto(fila.fecha_carga),
@@ -250,20 +290,6 @@ function convertirDocumentoDictamen(registro, tipoDocumento) {
     dictaminador: String(fila.dictaminador || ''),
     puedeDictaminar: estatus === ESTATUS_DOCUMENTO.EN_REVISION
   };
-}
-
-/**
- * Convierte una URL de Drive en una URL apta para el visor incrustado.
- */
-function construirUrlVistaPrevia(urlArchivo) {
-  const url = String(urlArchivo || '').trim();
-  if (!url) {
-    return '';
-  }
-  const porRuta = url.match(/\/d\/([A-Za-z0-9_-]+)/);
-  const porParametro = url.match(/[?&]id=([A-Za-z0-9_-]+)/);
-  const identificador = porRuta ? porRuta[1] : (porParametro ? porParametro[1] : '');
-  return identificador ? 'https://drive.google.com/file/d/' + identificador + '/preview' : url;
 }
 
 /**

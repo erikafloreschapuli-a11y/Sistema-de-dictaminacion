@@ -80,65 +80,98 @@ function apiActualizarMisDatos(datos) {
 
 /**
  * Carga o reemplaza un documento del estudiante.
- * Valida formato y tamano en el servidor, guarda el archivo en Drive y
- * actualiza la hoja Documentos con estatus En Revision.
+ * Para soportar muchas cargas simultaneas, el archivo se guarda en Drive
+ * FUERA del bloqueo; dentro solo se revalida el estatus y se escribe la hoja.
+ * Si la revalidacion falla, el archivo recien creado se manda a la papelera.
  */
 function apiSubirDocumento(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.ESTUDIANTE]);
     const tipoDocumento = obtenerTipoDocumentoValido(datos && datos.tipoDocumento);
     const archivo = prepararArchivoParaCarga(datos || {});
+    const estudiante = obtenerEstudianteParaUsuario(usuario, datos && datos.matricula);
 
-    return conBloqueoEscritura(function () {
-      const estudiante = obtenerEstudianteParaUsuario(usuario, datos && datos.matricula);
-      const documentoActual = buscarDocumentoDeEstudiante(estudiante.matricula, tipoDocumento);
-      const estatusAnterior = documentoActual
-        ? normalizarEstatusDocumento(documentoActual.estatus)
-        : ESTATUS_DOCUMENTO.PENDIENTE;
-      validarEstatusParaCarga(estatusAnterior);
+    // Revision previa sin bloqueo para no subir un archivo que se rechazara.
+    const documentoPrevio = buscarDocumentoDeEstudiante(estudiante.matricula, tipoDocumento);
+    validarEstatusParaCarga(documentoPrevio ? normalizarEstatusDocumento(documentoPrevio.estatus) : ESTATUS_DOCUMENTO.PENDIENTE);
 
-      const carpeta = obtenerCarpetaExpediente(estudiante);
-      const nombreArchivo = construirNombreArchivo(estudiante.matricula, tipoDocumento, archivo.extension);
-      const archivoDrive = carpeta.createFile(Utilities.newBlob(archivo.bytes, archivo.mime, nombreArchivo));
-      const ahora = new Date();
-      const cambios = {
-        url_archivo: archivoDrive.getUrl(),
-        estatus: ESTATUS_DOCUMENTO.EN_REVISION,
-        observaciones: '',
-        fecha_carga: ahora,
-        fecha_dictamen: '',
-        dictaminador: ''
-      };
+    const carpeta = obtenerCarpetaExpediente(estudiante);
+    const nombreArchivo = construirNombreArchivo(estudiante.matricula, tipoDocumento, archivo.extension);
+    const archivoDrive = carpeta.createFile(Utilities.newBlob(archivo.bytes, archivo.mime, nombreArchivo));
 
-      let registro;
-      if (documentoActual) {
-        actualizarRegistro(HOJAS.DOCUMENTOS, documentoActual._fila, cambios);
-        registro = Object.assign({}, documentoActual, cambios);
-      } else {
-        registro = Object.assign({
-          id_documento: generarId(PREFIJOS_ID.DOCUMENTO),
-          matricula: String(estudiante.matricula),
-          tipo_documento: tipoDocumento
-        }, cambios);
-        insertarRegistros(HOJAS.DOCUMENTOS, [registro]);
-      }
-
-      registrarEnHistorial({
-        usuario: usuario.correo,
-        matricula: String(estudiante.matricula),
-        tipo_documento: tipoDocumento,
-        estatus_anterior: estatusAnterior,
-        estatus_nuevo: ESTATUS_DOCUMENTO.EN_REVISION,
-        observacion: construirObservacionCarga(estatusAnterior, documentoActual)
+    try {
+      return conBloqueoEscritura(function () {
+        return registrarCargaDocumento(usuario, estudiante, tipoDocumento, archivoDrive.getUrl());
       });
-
-      return {
-        ok: true,
-        mensaje: 'Documento cargado. Queda en revision por el dictaminador.',
-        documento: convertirDocumento(registro, tipoDocumento)
-      };
-    });
+    } catch (error) {
+      descartarArchivo(archivoDrive);
+      throw error;
+    }
   });
+}
+
+/**
+ * Parte critica de la carga (requiere lock): revalida el estatus con datos
+ * frescos y escribe Documentos, Historial y estatus_general con una sola
+ * lectura de la hoja Documentos.
+ */
+function registrarCargaDocumento(usuario, estudiante, tipoDocumento, urlArchivo) {
+  const documentos = leerHoja(HOJAS.DOCUMENTOS);
+  const documentoActual = buscarDocumentoEnLista(documentos, estudiante.matricula, tipoDocumento);
+  const estatusAnterior = documentoActual
+    ? normalizarEstatusDocumento(documentoActual.estatus)
+    : ESTATUS_DOCUMENTO.PENDIENTE;
+  validarEstatusParaCarga(estatusAnterior);
+
+  const cambios = {
+    url_archivo: urlArchivo,
+    estatus: ESTATUS_DOCUMENTO.EN_REVISION,
+    observaciones: '',
+    fecha_carga: new Date(),
+    fecha_dictamen: '',
+    dictaminador: ''
+  };
+
+  let registro;
+  if (documentoActual) {
+    actualizarRegistro(HOJAS.DOCUMENTOS, documentoActual._fila, cambios);
+    registro = Object.assign(documentoActual, cambios);
+  } else {
+    registro = Object.assign({
+      id_documento: generarId(PREFIJOS_ID.DOCUMENTO),
+      matricula: String(estudiante.matricula),
+      tipo_documento: tipoDocumento
+    }, cambios);
+    insertarRegistros(HOJAS.DOCUMENTOS, [registro]);
+    documentos.push(registro);
+  }
+
+  registrarEnHistorial({
+    usuario: usuario.correo,
+    matricula: String(estudiante.matricula),
+    tipo_documento: tipoDocumento,
+    estatus_anterior: estatusAnterior,
+    estatus_nuevo: ESTATUS_DOCUMENTO.EN_REVISION,
+    observacion: construirObservacionCarga(estatusAnterior, documentoActual)
+  });
+  actualizarEstatusGeneral(estudiante, documentos);
+
+  return {
+    ok: true,
+    mensaje: 'Documento cargado. Queda en revisión por el dictaminador.',
+    documento: convertirDocumento(registro, tipoDocumento)
+  };
+}
+
+/**
+ * Manda a la papelera un archivo que no llego a registrarse en la hoja.
+ */
+function descartarArchivo(archivoDrive) {
+  try {
+    archivoDrive.setTrashed(true);
+  } catch (error) {
+    console.error('No se pudo descartar el archivo huerfano ' + archivoDrive.getId() + ': ' + error.message);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -229,7 +262,8 @@ function convertirDocumento(registro, tipoDocumento) {
   return {
     id_documento: String(fila.id_documento || ''),
     tipo_documento: String(fila.tipo_documento || tipoDocumento || ''),
-    url_archivo: String(fila.url_archivo || ''),
+    // Sin URL de Drive: el estudiante ve su archivo con apiObtenerArchivo.
+    tieneArchivo: Boolean(fila.url_archivo),
     estatus: estatus,
     observaciones: String(fila.observaciones === undefined || fila.observaciones === null ? '' : fila.observaciones).trim(),
     fecha_carga: convertirFechaTexto(fila.fecha_carga),
@@ -289,9 +323,15 @@ function validarEstatusParaCarga(estatus) {
  * Busca la fila de un documento por matricula y tipo.
  */
 function buscarDocumentoDeEstudiante(matricula, tipoDocumento) {
+  return buscarDocumentoEnLista(leerHoja(HOJAS.DOCUMENTOS), matricula, tipoDocumento);
+}
+
+/**
+ * Igual que buscarDocumentoDeEstudiante pero sobre filas ya leidas.
+ */
+function buscarDocumentoEnLista(filas, matricula, tipoDocumento) {
   const matriculaBuscada = String(matricula || '').trim().toLowerCase();
   const tipoBuscado = String(tipoDocumento || '').trim().toLowerCase();
-  const filas = leerHoja(HOJAS.DOCUMENTOS);
   for (let i = 0; i < filas.length; i++) {
     const fila = filas[i];
     if (String(fila.matricula || '').trim().toLowerCase() === matriculaBuscada &&
@@ -444,61 +484,8 @@ function construirObservacionCarga(estatusAnterior, documentoActual) {
 }
 
 /* ------------------------------------------------------------------ */
-/* RF-32 a RF-35: almacenamiento en Google Drive                      */
+/* RF-33: nombre del archivo (las carpetas viven en ServicioCarpetas)  */
 /* ------------------------------------------------------------------ */
-
-/**
- * Devuelve la carpeta raiz compartida. El ID se configura en Propiedades
- * del Script para que todos los usuarios guarden en el mismo lugar.
- */
-function obtenerCarpetaRaizDrive() {
-  const propiedades = PropertiesService.getScriptProperties();
-  const idGuardado = propiedades.getProperty(PROPIEDAD_CARPETA_RAIZ_DRIVE);
-  if (idGuardado) {
-    try {
-      return DriveApp.getFolderById(idGuardado);
-    } catch (error) {
-      throw crearError(
-        'DRIVE',
-        'No se pudo abrir la carpeta raiz de Drive. Verifica que este compartida con los usuarios y que el ID sea correcto.'
-      );
-    }
-  }
-  const raiz = DriveApp.getRootFolder();
-  const existentes = raiz.getFoldersByName(NOMBRE_CARPETA_RAIZ_DRIVE);
-  if (existentes.hasNext()) {
-    return existentes.next();
-  }
-  return raiz.createFolder(NOMBRE_CARPETA_RAIZ_DRIVE);
-}
-
-/**
- * Crea la ruta Generacion -> Carrera -> Matricula (RF-32).
- */
-function obtenerCarpetaExpediente(estudiante) {
-  const matricula = String(estudiante.matricula || '').trim();
-  if (!matricula) {
-    throw crearError('VALIDACION', 'El estudiante no tiene matricula registrada.');
-  }
-  const generacion = String(estudiante.generacion || '').trim() || CARPETA_SIN_GENERACION;
-  const carrera = String(estudiante.carrera || '').trim() || CARPETA_SIN_CARRERA;
-
-  const carpetaGeneracion = obtenerOCrearCarpeta(obtenerCarpetaRaizDrive(), generacion);
-  const carpetaCarrera = obtenerOCrearCarpeta(carpetaGeneracion, carrera);
-  return obtenerOCrearCarpeta(carpetaCarrera, matricula);
-}
-
-/**
- * Obtiene una subcarpeta por nombre o la crea si no existe.
- */
-function obtenerOCrearCarpeta(carpetaPadre, nombre) {
-  const nombreLimpio = String(nombre || '').trim() || CARPETA_SIN_GENERACION;
-  const existentes = carpetaPadre.getFoldersByName(nombreLimpio);
-  if (existentes.hasNext()) {
-    return existentes.next();
-  }
-  return carpetaPadre.createFolder(nombreLimpio);
-}
 
 /**
  * Construye el nombre matricula_tipoDocumento_fecha.extension (RF-33).

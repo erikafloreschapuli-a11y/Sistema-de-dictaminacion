@@ -4,43 +4,59 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Panel de Administrador - Dictaminacion UTP 2026</title>
+  <title>Administración - Dictaminación UTP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <style>
     <?!= include('estilos') ?>
 
     /* Ajustes propios del panel de administracion */
     .nota-cuenta { font-size: 12px; color: var(--texto-suave); }
-    .menu-enlace { display: inline-block; text-decoration: none; }
+    .rejilla-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; align-items: start; }
+    .rejilla-dos .panel { margin-bottom: 0; }
+    .tarjetas + .panel { margin-top: 18px; }
   </style>
 </head>
-<body>
+<body data-url-app="<?= cabecera.urlApp ?>">
   <header class="cabecera">
     <div class="cabecera-contenido">
-      <div>
-        <p class="cabecera-institucion">Universidad Tecnologica de Puebla</p>
-        <h1>Dictaminacion de documentos - Nuevo ingreso 2026</h1>
+      <div class="marca">
+        <div class="marca-logo">UTP</div>
+        <div>
+          <p class="cabecera-institucion">Universidad Tecnológica de Puebla</p>
+          <h1>Administración de la dictaminación</h1>
+        </div>
       </div>
       <div class="cabecera-usuario">
-        <span class="cabecera-nombre"><?= usuario.nombre ?></span>
-        <span class="etiqueta-rol"><?= usuario.rol ?></span>
+        <div class="avatar"><?= cabecera.iniciales ?></div>
+        <div class="cabecera-persona">
+          <span class="cabecera-nombre"><?= usuario.nombre ?></span>
+          <span class="etiqueta-rol"><?= usuario.rol ?></span>
+        </div>
+        <a class="boton-salir" href="<?= cabecera.urlSalir ?>" target="_top"><i data-icono="salir"></i><span>Cerrar sesión</span></a>
       </div>
     </div>
   </header>
 
+  <div class="area-trabajo con-lateral">
   <nav class="menu" aria-label="Secciones del panel">
-    <button type="button" class="menu-boton activo" data-seccion="reportes">Reportes</button>
-    <button type="button" class="menu-boton" data-seccion="dictaminadores">Dictaminadores</button>
-    <button type="button" class="menu-boton" data-seccion="estudiantes">Estudiantes</button>
-    <button type="button" class="menu-boton" data-seccion="configuracion">Configuracion</button>
-    <button type="button" class="menu-boton" data-seccion="historial">Historial</button>
-    <a class="menu-boton menu-enlace" href="?panel=dictaminador" target="_top">Dictaminar</a>
+    <button type="button" class="menu-boton activo" data-seccion="reportes"><i data-icono="grafica"></i>Reportes</button>
+    <button type="button" class="menu-boton" data-seccion="dictaminadores"><i data-icono="usuarios"></i>Dictaminadores</button>
+    <button type="button" class="menu-boton" data-seccion="estudiantes"><i data-icono="subir"></i>Importar estudiantes</button>
+    <button type="button" class="menu-boton" data-seccion="configuracion"><i data-icono="ajustes"></i>Configuración</button>
+    <button type="button" class="menu-boton" data-seccion="historial"><i data-icono="historial"></i>Historial</button>
+    <span class="menu-separador"></span>
+    <a class="menu-boton" href="<?= cabecera.urlApp ?>?panel=dictaminador" target="_top"><i data-icono="revisar"></i>Ir a dictaminar</a>
   </nav>
 
   <main class="contenedor">
 
     <!-- RF-23: reportes generales -->
     <section id="seccion-reportes" class="seccion">
-      <h2 class="seccion-titulo">Reportes generales <span class="rf">RF-23</span></h2>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Reportes generales</h2>
+        <p class="seccion-descripcion">Resumen del avance de los expedientes de nuevo ingreso.</p>
+      </div>
       <div class="tarjetas" id="contenedor-reportes">
         <p class="cargando">Cargando reportes...</p>
       </div>
@@ -48,10 +64,14 @@
 
     <!-- RF-22: alta, baja y cambio de rol de dictaminadores -->
     <section id="seccion-dictaminadores" class="seccion" hidden>
-      <h2 class="seccion-titulo">Dictaminadores <span class="rf">RF-22</span></h2>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Dictaminadores</h2>
+        <p class="seccion-descripcion">Da de alta, edita o da de baja al personal que revisa los expedientes.</p>
+      </div>
 
       <div class="panel">
         <h3 id="titulo-formulario">Nuevo dictaminador</h3>
+        <p class="panel-descripcion">El correo debe ser institucional (@utpuebla.edu.mx).</p>
         <form id="form-dictaminador" class="formulario">
           <label class="campo">Correo institucional
             <input type="email" id="campo-correo" placeholder="nombre@utpuebla.edu.mx" autocomplete="off" required>
@@ -97,13 +117,17 @@
 
     <!-- RF-25: importar lista de estudiantes -->
     <section id="seccion-estudiantes" class="seccion" hidden>
-      <h2 class="seccion-titulo">Importar estudiantes <span class="rf">RF-25</span></h2>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Importar estudiantes</h2>
+        <p class="seccion-descripcion">Carga la lista de estudiantes de nuevo ingreso desde un archivo CSV.</p>
+      </div>
 
       <div class="panel">
         <p>
           Columnas obligatorias: <code>matricula</code>, <code>nombre</code>,
           <code>correo_institucional</code>, <code>carrera</code>, <code>generacion</code>.
-          Opcionales: <code>correo_personal</code>, <code>telefono</code>, <code>estatus_general</code>.
+          Opcionales: <code>correo_personal</code>, <code>telefono</code>.
+          El <code>estatus_general</code> lo calcula el sistema automáticamente.
           El correo institucional debe pertenecer a <code>@alumno.utpuebla.edu.mx</code>.
           Se acepta CSV con coma o punto y coma. Si hay un solo error, no se importa nada.
         </p>
@@ -111,7 +135,7 @@
           <label class="campo">Archivo CSV
             <input type="file" id="archivo-estudiantes" accept=".csv,.txt">
           </label>
-          <label class="campo" style="grid-column: 1 / -1;">O pega la lista aqui
+          <label class="campo campo-ancho">O pega la lista aquí
             <textarea id="texto-estudiantes" placeholder="matricula;nombre;correo_institucional;carrera;generacion&#10;20260001;Ana Lopez;ana.lopez@alumno.utpuebla.edu.mx;Ingenieria;2026"></textarea>
           </label>
           <div class="formulario-acciones">
@@ -125,21 +149,56 @@
 
     <!-- RF-26: configuracion de parametros -->
     <section id="seccion-configuracion" class="seccion" hidden>
-      <h2 class="seccion-titulo">Configuracion <span class="rf">RF-26</span></h2>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Configuración</h2>
+        <p class="seccion-descripcion">Parámetros de carga y textos de los correos automáticos.</p>
+      </div>
 
       <div class="panel">
         <form id="form-configuracion" class="formulario">
-          <label class="campo">Tamano maximo de archivo (MB)
+          <label class="campo">Tamaño máximo de archivo (MB)
             <input type="number" id="campo-tamano" min="2" max="5" step="1" required>
           </label>
           <label class="campo">Tipos permitidos
-            <input type="text" id="campo-tipos" placeholder="PDF,JPG,PNG" required>
+            <input type="text" id="campo-tipos" placeholder="PDF" required>
           </label>
-          <label class="campo">Generacion activa
+          <label class="campo">Generación activa
             <input type="text" id="campo-generacion" maxlength="30" placeholder="2026" required>
           </label>
           <div class="formulario-acciones">
-            <button type="submit" class="boton" id="boton-guardar-configuracion">Guardar configuracion</button>
+            <button type="submit" class="boton" id="boton-guardar-configuracion">Guardar configuración</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- RF-29: plantillas de correo configurables -->
+      <div class="panel">
+        <h3>Plantillas de correo</h3>
+        <p>
+          Escribe los marcadores entre llaves dobles; el sistema los sustituye al enviar.
+          Ejemplo: <code>Hola {{nombre}}:</code>
+        </p>
+        <form id="form-plantillas" class="formulario">
+          <h4>Documento observado</h4>
+          <label class="campo">Asunto
+            <input type="text" id="campo-ASUNTO_CORREO_OBSERVADO" maxlength="150" required>
+          </label>
+          <label class="campo">Texto del correo
+            <textarea id="campo-PLANTILLA_CORREO_OBSERVADO" maxlength="3000" required></textarea>
+          </label>
+          <p class="ayuda" id="ayuda-PLANTILLA_CORREO_OBSERVADO"></p>
+
+          <h4>Expediente completo</h4>
+          <label class="campo">Asunto
+            <input type="text" id="campo-ASUNTO_CORREO_COMPLETO" maxlength="150" required>
+          </label>
+          <label class="campo">Texto del correo
+            <textarea id="campo-PLANTILLA_CORREO_COMPLETO" maxlength="3000" required></textarea>
+          </label>
+          <p class="ayuda" id="ayuda-PLANTILLA_CORREO_COMPLETO"></p>
+
+          <div class="formulario-acciones">
+            <button type="submit" class="boton" id="boton-guardar-plantillas">Guardar plantillas</button>
           </div>
         </form>
       </div>
@@ -147,7 +206,10 @@
 
     <!-- RF-24: historial completo (solo lectura, RF-31) -->
     <section id="seccion-historial" class="seccion" hidden>
-      <h2 class="seccion-titulo">Historial de cambios <span class="rf">RF-24</span></h2>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Historial de cambios</h2>
+        <p class="seccion-descripcion">Registro de solo lectura de todas las acciones del sistema.</p>
+      </div>
 
       <div class="panel">
         <form id="form-historial" class="filtros">
@@ -157,7 +219,7 @@
           <label class="campo">Hasta
             <input type="date" id="filtro-hasta">
           </label>
-          <label class="campo">Matricula
+          <label class="campo">Matrícula
             <input type="text" id="filtro-matricula" placeholder="20260001">
           </label>
           <label class="campo">Usuario
@@ -180,11 +242,11 @@
             <tr>
               <th>Fecha y hora</th>
               <th>Usuario</th>
-              <th>Matricula</th>
+              <th>Matrícula</th>
               <th>Tipo</th>
               <th>Antes</th>
-              <th>Despues</th>
-              <th>Observacion</th>
+              <th>Después</th>
+              <th>Observación</th>
             </tr>
           </thead>
           <tbody id="cuerpo-historial">
@@ -193,11 +255,12 @@
         </table>
       </div>
       <div class="mas-historial">
-        <button type="button" class="boton boton-secundario" id="boton-mas-historial" hidden>Cargar mas</button>
+        <button type="button" class="boton boton-secundario" id="boton-mas-historial" hidden>Cargar más</button>
       </div>
     </section>
 
   </main>
+  </div>
 
   <div id="aviso-global" class="aviso" hidden></div>
   <div id="datos-sesion" data-correo="<?= usuario.correo ?>" hidden></div>
@@ -217,12 +280,20 @@
     };
 
     const DEFINICION_REPORTES = [
-      { clave: 'totalAlumnos', etiqueta: 'Total de alumnos', clase: 'tarjeta-neutro' },
-      { clave: 'pendientes', etiqueta: 'Pendientes', clase: 'tarjeta-gris' },
-      { clave: 'enRevision', etiqueta: 'En revision', clase: 'tarjeta-azul' },
-      { clave: 'aprobados', etiqueta: 'Aprobados', clase: 'tarjeta-verde' },
-      { clave: 'observados', etiqueta: 'Observados', clase: 'tarjeta-rojo' },
-      { clave: 'expedientesCompletos', etiqueta: 'Expedientes completos', clase: 'tarjeta-verde' }
+      { clave: 'totalAlumnos', etiqueta: 'Total de alumnos', clase: 'tarjeta-neutro', icono: 'usuarios' },
+      { clave: 'pendientes', etiqueta: 'Documentos pendientes', clase: 'tarjeta-gris', icono: 'documento' },
+      { clave: 'enRevision', etiqueta: 'En revisión', clase: 'tarjeta-azul', icono: 'reloj' },
+      { clave: 'aprobados', etiqueta: 'Aprobados', clase: 'tarjeta-verde', icono: 'check' },
+      { clave: 'observados', etiqueta: 'Observados', clase: 'tarjeta-rojo', icono: 'alerta' },
+      { clave: 'expedientesCompletos', etiqueta: 'Expedientes completos', clase: 'tarjeta-verde', icono: 'carpeta' },
+      { clave: 'cuotaCorreosRestante', etiqueta: 'Correos disponibles hoy', clase: 'tarjeta-neutro', icono: 'correo' }
+    ];
+
+    const CLAVES_PLANTILLAS = [
+      'ASUNTO_CORREO_OBSERVADO',
+      'PLANTILLA_CORREO_OBSERVADO',
+      'ASUNTO_CORREO_COMPLETO',
+      'PLANTILLA_CORREO_COMPLETO'
     ];
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -231,7 +302,7 @@
         ? String(datosSesion.dataset.correo || '').trim().toLowerCase()
         : '';
 
-      document.querySelectorAll('.menu-boton').forEach(function (boton) {
+      document.querySelectorAll('.menu-boton[data-seccion]').forEach(function (boton) {
         boton.addEventListener('click', function () {
           cambiarSeccion(boton.dataset.seccion);
         });
@@ -246,6 +317,7 @@
       document.getElementById('archivo-estudiantes').addEventListener('change', leerArchivoCsv);
 
       document.getElementById('form-configuracion').addEventListener('submit', guardarConfiguracion);
+      document.getElementById('form-plantillas').addEventListener('submit', guardarPlantillas);
 
       document.getElementById('form-historial').addEventListener('submit', function (evento) {
         evento.preventDefault();
@@ -266,7 +338,7 @@
 
     function cambiarSeccion(nombre) {
       estadoPagina.seccion = nombre;
-      document.querySelectorAll('.menu-boton').forEach(function (boton) {
+      document.querySelectorAll('.menu-boton[data-seccion]').forEach(function (boton) {
         boton.classList.toggle('activo', boton.dataset.seccion === nombre);
       });
       document.querySelectorAll('.seccion').forEach(function (seccion) {
@@ -293,9 +365,12 @@
       try {
         const respuesta = await api('apiObtenerReportesGenerales');
         contenedor.innerHTML = DEFINICION_REPORTES.map(function (item) {
-          const valor = respuesta.reportes[item.clave] === undefined ? 0 : respuesta.reportes[item.clave];
+          const dato = respuesta.reportes[item.clave];
+          // null indica que Google no informo la cuota; se muestra un guion en vez de 0.
+          const valor = dato === null ? '—' : (dato === undefined ? 0 : dato);
           return '<article class="tarjeta ' + item.clase + '">' +
-            '<p class="tarjeta-valor">' + valor + '</p>' +
+            '<div class="tarjeta-icono">' + icono(item.icono) + '</div>' +
+            '<p class="tarjeta-valor">' + escapeHtml(valor) + '</p>' +
             '<p class="tarjeta-etiqueta">' + item.etiqueta + '</p>' +
             '</article>';
         }).join('');
@@ -326,7 +401,7 @@
     function renderDictaminadores() {
       const cuerpo = document.getElementById('cuerpo-dictaminadores');
       if (!estadoPagina.dictaminadores.length) {
-        cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Todavia no hay dictaminadores dados de alta.</td></tr>';
+        cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Todavía no hay dictaminadores dados de alta.</td></tr>';
         return;
       }
       cuerpo.innerHTML = estadoPagina.dictaminadores.map(function (diccionario) {
@@ -337,9 +412,12 @@
         const accionEstado = diccionario.activo
           ? '<button type="button" class="boton boton-mini boton-peligro" data-accion="estado" data-activo="false" data-correo="' + escapeHtml(diccionario.correo) + '">Dar de baja</button>'
           : '<button type="button" class="boton boton-mini boton-secundario" data-accion="estado" data-activo="true" data-correo="' + escapeHtml(diccionario.correo) + '">Reactivar</button>';
+        const botonHistorial = '<button type="button" class="boton boton-mini boton-secundario" data-accion="historial" data-correo="' +
+          escapeHtml(diccionario.correo) + '">' + icono('historial') + 'Historial</button>';
         const acciones = esCuentaActual
-          ? '<span class="nota-cuenta">Tu cuenta</span>'
-          : '<button type="button" class="boton boton-mini boton-secundario" data-accion="editar" data-correo="' + escapeHtml(diccionario.correo) + '">Editar</button>' +
+          ? botonHistorial + '<span class="nota-cuenta">Tu cuenta</span>'
+          : botonHistorial +
+            '<button type="button" class="boton boton-mini boton-secundario" data-accion="editar" data-correo="' + escapeHtml(diccionario.correo) + '">Editar</button>' +
             accionEstado;
         return '<tr>' +
           '<td>' + escapeHtml(diccionario.nombre) + '</td>' +
@@ -364,7 +442,10 @@
           activo: document.getElementById('campo-activo').checked
         });
         estadoPagina.cargado.historial = false;
-        mostrarAviso('Usuario guardado: ' + respuesta.accion.toLowerCase() + '.', 'ok');
+        mostrarAviso(
+          'Usuario guardado: ' + respuesta.accion.toLowerCase() + '.' + (respuesta.avisoCarpeta ? ' ' + respuesta.avisoCarpeta : ''),
+          respuesta.avisoCarpeta ? 'error' : 'ok'
+        );
         limpiarFormularioDictaminador();
         await cargarDictaminadores();
       } catch (error) {
@@ -388,6 +469,16 @@
         return;
       }
       const correo = boton.dataset.correo;
+
+      // El historial de cada usuario: la seccion Historial filtrada por su correo.
+      if (boton.dataset.accion === 'historial') {
+        document.getElementById('form-historial').reset();
+        document.getElementById('filtro-usuario').value = correo;
+        estadoPagina.cargado.historial = true;
+        cambiarSeccion('historial');
+        cargarHistorial(true);
+        return;
+      }
 
       if (String(correo || '').trim().toLowerCase() === estadoPagina.correoActual) {
         mostrarAviso('No puedes modificar tu propia cuenta desde este panel.', 'error');
@@ -422,9 +513,12 @@
         }
         marcarCargando(boton, true);
         try {
-          await api('apiCambiarEstadoDictaminador', { correo: correo, activo: activo });
+          const respuesta = await api('apiCambiarEstadoDictaminador', { correo: correo, activo: activo });
           estadoPagina.cargado.historial = false;
-          mostrarAviso(activo ? 'Usuario reactivado.' : 'Usuario dado de baja.', 'ok');
+          mostrarAviso(
+            (activo ? 'Usuario reactivado.' : 'Usuario dado de baja.') + (respuesta.avisoCarpeta ? ' ' + respuesta.avisoCarpeta : ''),
+            respuesta.avisoCarpeta ? 'error' : 'ok'
+          );
           await cargarDictaminadores();
         } catch (error) {
           mostrarAviso(error.message, 'error');
@@ -458,9 +552,10 @@
       try {
         const respuesta = await api('apiImportarEstudiantes', { texto: texto });
         mostrarResultadoImportacion(
-          '<div class="resultado-ok">Se importaron ' + respuesta.insertados + ' estudiante(s) correctamente.</div>'
+          '<div class="resultado-ok">Se importaron ' + respuesta.insertados + ' estudiante(s) correctamente.' +
+          describirCarpetasCreadas(respuesta.carpetas) + '</div>'
         );
-        mostrarAviso('Importacion exitosa: ' + respuesta.insertados + ' registro(s).', 'ok');
+        mostrarAviso('Importación exitosa: ' + respuesta.insertados + ' registro(s).', 'ok');
         document.getElementById('texto-estudiantes').value = '';
         document.getElementById('archivo-estudiantes').value = '';
         estadoPagina.cargado.reportes = false;
@@ -477,6 +572,25 @@
       } finally {
         marcarCargando(boton, false);
       }
+    }
+
+    /**
+     * Resume las carpetas de Drive creadas por carrera y matricula.
+     */
+    function describirCarpetasCreadas(carpetas) {
+      if (!carpetas) {
+        return '';
+      }
+      if (carpetas.error) {
+        return '<br>No se pudieron crear las carpetas en Drive (' + escapeHtml(carpetas.error) +
+          '). Se crearán cuando cada estudiante suba su primer documento.';
+      }
+      let texto = '<br>Carpetas en Drive: ' + carpetas.creadas + ' expediente(s) nuevos en ' +
+        carpetas.carreras + ' carrera(s).';
+      if (carpetas.pendientes) {
+        texto += ' Faltan ' + carpetas.pendientes + '; se terminarán de crear en segundo plano en unos minutos.';
+      }
+      return texto;
     }
 
     function mostrarResultadoImportacion(html) {
@@ -499,6 +613,7 @@
       try {
         const respuesta = await api('apiObtenerConfiguracion');
         mostrarConfiguracion(respuesta.configuracion);
+        mostrarPlantillas(respuesta.configuracion, respuesta.marcadores);
       } catch (error) {
         estadoPagina.cargado.configuracion = false;
         mostrarAviso(error.message, 'error');
@@ -509,6 +624,42 @@
       document.getElementById('campo-tamano').value = configuracion.TAMANIO_MAXIMO_ARCHIVO_MB;
       document.getElementById('campo-tipos').value = configuracion.TIPOS_PERMITIDOS;
       document.getElementById('campo-generacion').value = configuracion.GENERACION_ACTIVA;
+    }
+
+    /* ---------------- RF-29: plantillas de correo ---------------- */
+
+    function mostrarPlantillas(configuracion, marcadores) {
+      CLAVES_PLANTILLAS.forEach(function (clave) {
+        if (configuracion[clave] !== undefined) {
+          document.getElementById('campo-' + clave).value = configuracion[clave];
+        }
+      });
+      if (marcadores) {
+        ['PLANTILLA_CORREO_OBSERVADO', 'PLANTILLA_CORREO_COMPLETO'].forEach(function (clave) {
+          document.getElementById('ayuda-' + clave).textContent = 'Marcadores disponibles: ' +
+            (marcadores[clave] || []).map(function (marcador) { return '{{' + marcador + '}}'; }).join(', ');
+        });
+      }
+    }
+
+    async function guardarPlantillas(evento) {
+      evento.preventDefault();
+      const boton = document.getElementById('boton-guardar-plantillas');
+      const datos = {};
+      CLAVES_PLANTILLAS.forEach(function (clave) {
+        datos[clave] = document.getElementById('campo-' + clave).value;
+      });
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiGuardarPlantillasCorreo', datos);
+        estadoPagina.cargado.historial = false;
+        mostrarPlantillas(respuesta.configuracion);
+        mostrarAviso('Plantillas de correo guardadas.', 'ok');
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
+      }
     }
 
     async function guardarConfiguracion(evento) {

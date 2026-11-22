@@ -13,7 +13,10 @@ function apiObtenerReportesGenerales() {
     asegurarRol([ROLES.ADMINISTRADOR]);
     const estudiantes = leerHoja(HOJAS.ESTUDIANTES);
     const documentos = leerHoja(HOJAS.DOCUMENTOS);
-    return { ok: true, reportes: construirReportesGenerales(estudiantes, documentos) };
+    const reportes = construirReportesGenerales(estudiantes, documentos);
+    // Se muestra para que el Administrador anticipe dias de mucho dictamen (RNF-10).
+    reportes.cuotaCorreosRestante = obtenerCuotaCorreosRestante();
+    return { ok: true, reportes: reportes };
   });
 }
 

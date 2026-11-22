@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iniciar sesión - Dictaminación UTP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    <?!= include('estilos') ?>
+
+    /* inicio.html - Pantalla de inicio de sesion y acceso denegado */
+    body { min-height: 100vh; }
+    .inicio {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    }
+    .inicio-portada {
+      background:
+        radial-gradient(circle at 15% 20%, rgba(187, 247, 208, 0.18), transparent 45%),
+        radial-gradient(circle at 85% 90%, rgba(22, 163, 74, 0.35), transparent 50%),
+        linear-gradient(150deg, var(--verde-950) 0%, var(--verde-800) 100%);
+      color: #fff;
+      padding: 48px 56px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 40px;
+    }
+    .inicio-portada .marca-logo { width: 52px; height: 52px; font-size: 15px; }
+    .inicio-titulo { font-size: 38px; line-height: 1.15; font-weight: 800; margin: 0 0 14px; max-width: 520px; }
+    .inicio-subtitulo { font-size: 16px; opacity: 0.85; margin: 0; max-width: 460px; }
+    .inicio-pasos { list-style: none; padding: 0; margin: 32px 0 0; display: grid; gap: 14px; max-width: 440px; }
+    .inicio-pasos li { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
+    .inicio-pasos .numero {
+      width: 28px; height: 28px; flex: none; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.14); display: grid; place-items: center; font-weight: 700; font-size: 13px;
+    }
+    .inicio-pie { font-size: 13px; opacity: 0.7; margin: 0; }
+
+    .inicio-formulario { display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
+    .tarjeta-inicio {
+      width: min(420px, 100%);
+      background: var(--superficie);
+      border: 1px solid var(--borde);
+      border-radius: 16px;
+      box-shadow: var(--sombra-alta);
+      padding: 36px 32px;
+    }
+    .tarjeta-inicio h2 { margin: 0 0 6px; font-size: 24px; }
+    .tarjeta-inicio > p { margin: 0 0 24px; color: var(--texto-suave); font-size: 14px; }
+    .cuenta-detectada {
+      display: flex; align-items: center; gap: 12px;
+      border: 1px solid var(--borde); border-radius: var(--radio); padding: 14px; margin-bottom: 20px;
+      background: var(--verde-50);
+    }
+    .cuenta-detectada .avatar { width: 44px; height: 44px; font-size: 15px; }
+    .cuenta-datos { min-width: 0; }
+    .cuenta-nombre { margin: 0; font-weight: 600; }
+    .cuenta-correo { margin: 0; font-size: 13px; color: var(--texto-suave); overflow-wrap: anywhere; }
+    .cuenta-rol { margin-left: auto; }
+    .boton-google {
+      width: 100%; padding: 13px 18px; font-size: 15px;
+    }
+    .enlace-secundario {
+      display: block; text-align: center; margin-top: 14px; font-size: 14px; color: var(--texto-suave);
+    }
+    .enlace-secundario:hover { color: var(--verde-800); }
+    .aviso-inicio {
+      display: flex; gap: 10px; align-items: flex-start;
+      border-radius: var(--radio-chico); padding: 12px 14px; margin-bottom: 20px; font-size: 14px;
+    }
+    .aviso-inicio .icono { margin-top: 1px; }
+    .aviso-inicio-error { background: var(--rojo-50); color: var(--rojo-700); border: 1px solid #f3b4b4; }
+    .aviso-inicio-ok { background: var(--verde-50); color: var(--verde-900); border: 1px solid var(--verde-200); }
+    .dominios { margin: 24px 0 0; padding-top: 18px; border-top: 1px solid var(--borde); font-size: 13px; color: var(--texto-suave); }
+    .dominios p { margin: 0 0 6px; }
+
+    @media (max-width: 900px) {
+      .inicio { grid-template-columns: 1fr; }
+      .inicio-portada { padding: 28px 24px; gap: 20px; }
+      .inicio-titulo { font-size: 26px; }
+      .inicio-pasos, .inicio-pie { display: none; }
+      .inicio-formulario { padding: 24px 16px 40px; align-items: flex-start; }
+      .tarjeta-inicio { padding: 28px 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="inicio">
+    <section class="inicio-portada">
+      <div class="marca">
+        <div class="marca-logo">UTP</div>
+        <div>
+          <p class="cabecera-institucion">Universidad Tecnológica de Puebla</p>
+          <strong>Servicios Escolares</strong>
+        </div>
+      </div>
+
+      <div>
+        <h1 class="inicio-titulo">Dictaminación de documentos de nuevo ingreso <?= generacion ?></h1>
+        <p class="inicio-subtitulo">Carga tu CURP, acta de nacimiento y certificado, y consulta en línea el avance de la revisión de tu expediente.</p>
+        <ol class="inicio-pasos">
+          <li><span class="numero">1</span><span>Inicia sesión con tu cuenta institucional de Google.</span></li>
+          <li><span class="numero">2</span><span>Sube tus documentos en formato PDF.</span></li>
+          <li><span class="numero">3</span><span>Recibe un correo si algún documento necesita corrección.</span></li>
+        </ol>
+      </div>
+
+      <p class="inicio-pie">Acceso exclusivo para la comunidad UTP.</p>
+    </section>
+
+    <main class="inicio-formulario">
+      <div class="tarjeta-inicio">
+        <? if (modo === 'denegado') { ?>
+          <h2>No puedes ingresar</h2>
+          <p>La cuenta con la que entraste no tiene acceso al sistema.</p>
+          <div class="aviso-inicio aviso-inicio-error" role="alert">
+            <i data-icono="alerta"></i><span><?= mensaje ?></span>
+          </div>
+          <a class="boton boton-google" href="<?= urlCambiarCuenta ?>" target="_top">
+            <i data-icono="persona"></i> Ingresar con otra cuenta
+          </a>
+        <? } else { ?>
+          <h2>Iniciar sesión</h2>
+          <p>Confirma la cuenta institucional con la que deseas ingresar.</p>
+
+          <? if (modo === 'salida') { ?>
+            <div class="aviso-inicio aviso-inicio-ok" role="status">
+              <i data-icono="check"></i><span>Cerraste tu sesión correctamente.</span>
+            </div>
+          <? } ?>
+
+          <div class="cuenta-detectada">
+            <div class="avatar"><?= iniciales ?></div>
+            <div class="cuenta-datos">
+              <p class="cuenta-nombre"><?= usuario.nombre ?></p>
+              <p class="cuenta-correo"><?= usuario.correo ?></p>
+            </div>
+            <span class="estado estado-activo cuenta-rol"><?= usuario.rol ?></span>
+          </div>
+
+          <a class="boton boton-google" href="<?= urlIngresar ?>" target="_top">
+            Ingresar al sistema
+          </a>
+          <a class="enlace-secundario" href="<?= urlCambiarCuenta ?>" target="_top">¿No eres tú? Usar otra cuenta</a>
+        <? } ?>
+
+        <div class="dominios">
+          <p><strong>Estudiantes:</strong> cuenta <?= dominioEstudiante ?></p>
+          <p><strong>Personal:</strong> cuenta <?= dominioPersonal ?> registrada por el administrador.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <?!= include('scripts') ?>
+</body>
+</html>
