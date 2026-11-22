@@ -8,10 +8,14 @@ const CODIGO_SESION_TERMINADA = 'SESION';
 const CODIGO_SISTEMA_OCUPADO = 'OCUPADO';
 
 // Reintentos cuando el servidor esta saturado (muchas cargas a la vez).
-// La espera crece y lleva un componente aleatorio para que no todos los
-// navegadores reintenten en el mismo instante.
-const MAXIMO_REINTENTOS = 4;
-const ESPERA_BASE_REINTENTO_MS = 1500;
+// Google admite unas 30 ejecuciones simultaneas por cuenta y todas las de la
+// app corren con la cuenta que la desplego, asi que en picos hay que esperar
+// turno. La espera crece hasta ESPERA_MAXIMA y es aleatoria (entre la mitad y
+// el total) para que los navegadores no reintenten todos en el mismo instante.
+// En el peor caso se espera alrededor de 2.5 minutos antes de rendirse.
+const MAXIMO_REINTENTOS = 8;
+const ESPERA_BASE_REINTENTO_MS = 2000;
+const ESPERA_MAXIMA_REINTENTO_MS = 30000;
 
 // Fallos de Google por exceso de ejecuciones simultaneas; ocurren antes de
 // ejecutar la funcion, por eso reintentar no duplica escrituras.
@@ -34,8 +38,10 @@ function llamarServidor(nombreFuncion, datos) {
 /**
  * Llama una funcion api* del servidor y lanza Error si ok no es true.
  * Los errores de validacion conservan su lista de detalles (error.errores).
+ * opciones.alReintentar(numeroIntento) avisa a la vista que se esta esperando turno.
  */
-async function api(nombreFuncion, datos) {
+async function api(nombreFuncion, datos, opciones) {
+  const alReintentar = opciones && opciones.alReintentar;
   for (let intento = 0; ; intento++) {
     try {
       return await llamarApiUnaVez(nombreFuncion, datos);
@@ -44,9 +50,17 @@ async function api(nombreFuncion, datos) {
       if (!saturado || intento >= MAXIMO_REINTENTOS) {
         throw error;
       }
-      await esperar(ESPERA_BASE_REINTENTO_MS * Math.pow(2, intento) + Math.random() * 1000);
+      if (alReintentar) {
+        alReintentar(intento + 1);
+      }
+      await esperar(calcularEsperaReintento(intento));
     }
   }
+}
+
+function calcularEsperaReintento(intento) {
+  const techo = Math.min(ESPERA_MAXIMA_REINTENTO_MS, ESPERA_BASE_REINTENTO_MS * Math.pow(2, intento));
+  return techo / 2 + Math.random() * (techo / 2);
 }
 
 function esperar(milisegundos) {

@@ -539,13 +539,16 @@
         const tiempos = [];
         const errores = [];
         let terminadas = 0;
+        let reintentos = 0;
+        const contarReintento = function () { reintentos++; };
         mostrarResultadoPrueba('<p><strong>Subiendo ' + cantidad + ' archivos a la vez...</strong> <span id="contador-prueba">0 de ' + cantidad + '</span></p>' +
           '<div class="progreso-prueba"><span id="barra-prueba"></span></div>');
         const inicio = Date.now();
 
         await Promise.all(preparacion.matriculas.map(function (matricula) {
           const inicioCarga = Date.now();
-          return api('apiEjecutarCargaPrueba', { matricula: matricula, nombreArchivo: matricula + '.pdf', contenidoBase64: contenido })
+          return api('apiEjecutarCargaPrueba', { matricula: matricula, nombreArchivo: matricula + '.pdf', contenidoBase64: contenido },
+            { alReintentar: contarReintento })
             .then(function () { tiempos.push(Date.now() - inicioCarga); })
             .catch(function (error) { errores.push(matricula + ': ' + error.message); })
             .finally(function () {
@@ -557,7 +560,7 @@
 
         const totalSegundos = (Date.now() - inicio) / 1000;
         const verificacion = (await api('apiVerificarPruebaCarga')).verificacion;
-        mostrarResultadoPrueba(renderResultadoPrueba(cantidad, kilobytes, totalSegundos, tiempos, errores, verificacion));
+        mostrarResultadoPrueba(renderResultadoPrueba(cantidad, kilobytes, totalSegundos, tiempos, errores, verificacion, reintentos));
         estadoPagina.cargado.historial = false;
       } catch (error) {
         mostrarResultadoPrueba('<div class="resultado-error">' + escapeHtml(error.message) + '</div>');
@@ -566,7 +569,7 @@
       }
     }
 
-    function renderResultadoPrueba(cantidad, kilobytes, totalSegundos, tiempos, errores, verificacion) {
+    function renderResultadoPrueba(cantidad, kilobytes, totalSegundos, tiempos, errores, verificacion, reintentos) {
       const ordenados = tiempos.slice().sort(function (a, b) { return a - b; });
       const segundos = function (ms) { return (ms / 1000).toFixed(1) + ' s'; };
       const promedio = ordenados.length ? ordenados.reduce(function (a, b) { return a + b; }, 0) / ordenados.length : 0;
@@ -585,6 +588,7 @@
           '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + totalSegundos.toFixed(1) + ' s</p><p class="tarjeta-etiqueta">Tiempo total</p></article>' +
           '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + segundos(promedio) + '</p><p class="tarjeta-etiqueta">Promedio por carga</p></article>' +
           '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + segundos(ordenados[ordenados.length - 1] || 0) + '</p><p class="tarjeta-etiqueta">Carga más lenta</p></article>' +
+          '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + reintentos + '</p><p class="tarjeta-etiqueta">Reintentos por saturación</p></article>' +
         '</div>' +
         '<ul class="lista-verificacion">' +
           revisar(!errores.length, errores.length ? errores.length + ' cargas fallaron' + lista(errores) : 'Ninguna carga falló (' + cantidad + ' PDF de ' + kilobytes + ' KB)') +

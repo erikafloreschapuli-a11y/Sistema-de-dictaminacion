@@ -50,7 +50,7 @@ function apiObtenerExpedienteDictaminador(datos) {
     if (!estudiante) {
       throw crearError('NO_REGISTRADO', 'No existe un estudiante con la matricula ' + matricula + '.');
     }
-    const expediente = construirExpedientes([estudiante], leerHoja(HOJAS.DOCUMENTOS))[0];
+    const expediente = construirExpedientes([estudiante], leerDocumentosDeEstudiante(estudiante.matricula))[0];
     return { ok: true, expediente: expediente };
   });
 }
@@ -179,7 +179,7 @@ function construirMensajeDictamen(estatusNuevo, expedienteCompleto, notificacion
  * la app. Requiere lock activo: se llama despues de cada carga o dictamen.
  */
 function actualizarEstatusGeneral(estudiante, documentosLeidos) {
-  const documentos = documentosLeidos || leerHoja(HOJAS.DOCUMENTOS);
+  const documentos = documentosLeidos || leerDocumentosDeEstudiante(estudiante.matricula);
   const expediente = construirExpedientes([estudiante], documentos)[0];
   if (String(estudiante.estatus_general || '') !== expediente.estatus) {
     actualizarRegistro(HOJAS.ESTUDIANTES, estudiante._fila, { estatus_general: expediente.estatus });

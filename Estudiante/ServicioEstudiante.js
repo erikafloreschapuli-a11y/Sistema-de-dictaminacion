@@ -124,7 +124,7 @@ function procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos) {
  * lectura de la hoja Documentos.
  */
 function registrarCargaDocumento(usuario, estudiante, tipoDocumento, urlArchivo) {
-  const documentos = leerHoja(HOJAS.DOCUMENTOS);
+  const documentos = leerDocumentosDeEstudiante(estudiante.matricula);
   const documentoActual = buscarDocumentoEnLista(documentos, estudiante.matricula, tipoDocumento);
   const estatusAnterior = documentoActual
     ? normalizarEstatusDocumento(documentoActual.estatus)
@@ -246,7 +246,7 @@ function convertirEstudianteParaVista(estudiante) {
  */
 function obtenerDocumentosParaVista(matricula) {
   const matriculaBuscada = String(matricula || '').trim().toLowerCase();
-  const filas = leerHoja(HOJAS.DOCUMENTOS).filter(function (fila) {
+  const filas = leerDocumentosDeEstudiante(matricula).filter(function (fila) {
     return String(fila.matricula || '').trim().toLowerCase() === matriculaBuscada;
   });
   const porTipo = {};
@@ -331,7 +331,15 @@ function validarEstatusParaCarga(estatus) {
  * Busca la fila de un documento por matricula y tipo.
  */
 function buscarDocumentoDeEstudiante(matricula, tipoDocumento) {
-  return buscarDocumentoEnLista(leerHoja(HOJAS.DOCUMENTOS), matricula, tipoDocumento);
+  return buscarDocumentoEnLista(leerDocumentosDeEstudiante(matricula), matricula, tipoDocumento);
+}
+
+/**
+ * Filas de Documentos de una sola matricula, sin leer la hoja completa
+ * (con miles de alumnos la lectura completa alargaba el bloqueo).
+ */
+function leerDocumentosDeEstudiante(matricula) {
+  return buscarFilasPorValor(HOJAS.DOCUMENTOS, 'matricula', matricula);
 }
 
 /**

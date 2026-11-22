@@ -153,6 +153,10 @@ const ACCIONES_SESION = {
 // Pagina de Google para elegir otra cuenta sin cerrar las demas.
 const URL_CAMBIAR_CUENTA_GOOGLE = 'https://accounts.google.com/AccountChooser?continue=';
 
+// Mensajes de Google (en ingles o espanol) que indican saturacion o una
+// falla pasajera de un servicio; se responden como OCUPADO para reintentar.
+const PATRON_ERROR_TEMPORAL_GOOGLE = /too many|demasiad|simult|timed out|time ?out|tiempo de espera|temporar|unavailable|no (est[aá] )?disponible|try again|int[eé]ntalo de nuevo|service error|error de servicio|rate limit|lock/i;
+
 // Espera maxima del LockService en milisegundos (RNF-03).
 const TIEMPO_ESPERA_BLOQUEO_MS = 30000;
 

@@ -5,21 +5,76 @@
  * servicio para cumplir RNF-03 (LockService en toda escritura).
  */
 
+// Objetos reutilizados durante UNA ejecucion. En Apps Script las variables
+// globales se crean de nuevo en cada llamada, asi que nunca se comparten
+// entre usuarios. Abrir el libro y leer encabezados cuesta llamadas a Google;
+// repetirlo dentro del bloqueo alargaba la espera de las cargas simultaneas.
+// Solo se guardan libro, hojas y encabezados: los datos siempre se leen frescos.
+const cacheEjecucion = { libro: null, hojas: {}, encabezados: {} };
+
 /**
  * Devuelve el libro maestro configurado en Propiedades del Script.
  * Si el script esta vinculado a una hoja, la usa y guarda su ID.
  */
 function obtenerLibroMaestro() {
+  if (cacheEjecucion.libro) {
+    return cacheEjecucion.libro;
+  }
   const idGuardado = PropertiesService.getScriptProperties().getProperty(PROPIEDAD_LIBRO_MAESTRO);
   if (idGuardado) {
-    return SpreadsheetApp.openById(idGuardado);
+    cacheEjecucion.libro = SpreadsheetApp.openById(idGuardado);
+    return cacheEjecucion.libro;
   }
   const libroActivo = SpreadsheetApp.getActiveSpreadsheet();
   if (libroActivo) {
     PropertiesService.getScriptProperties().setProperty(PROPIEDAD_LIBRO_MAESTRO, libroActivo.getId());
+    cacheEjecucion.libro = libroActivo;
     return libroActivo;
   }
   throw crearError('CONFIGURACION', 'No hay libro maestro configurado. Ejecuta definirLibroMaestro("ID_DE_LA_HOJA") primero.');
+}
+
+/**
+ * Devuelve una hoja del libro maestro, o null si no existe.
+ */
+function obtenerHoja(nombreHoja) {
+  if (!cacheEjecucion.hojas[nombreHoja]) {
+    cacheEjecucion.hojas[nombreHoja] = obtenerLibroMaestro().getSheetByName(nombreHoja);
+  }
+  return cacheEjecucion.hojas[nombreHoja];
+}
+
+/**
+ * Igual que obtenerHoja pero lanza un error claro si la hoja no existe.
+ */
+function obtenerHojaObligatoria(nombreHoja) {
+  const hoja = obtenerHoja(nombreHoja);
+  if (!hoja) {
+    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta instalarSistema() desde el editor.');
+  }
+  return hoja;
+}
+
+/**
+ * Encabezados de la fila 1 de una hoja, leidos una sola vez por ejecucion.
+ */
+function obtenerEncabezados(nombreHoja) {
+  if (!cacheEjecucion.encabezados[nombreHoja]) {
+    const hoja = obtenerHojaObligatoria(nombreHoja);
+    cacheEjecucion.encabezados[nombreHoja] = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  }
+  return cacheEjecucion.encabezados[nombreHoja];
+}
+
+/**
+ * Posicion (base 0) de una columna o error si no existe.
+ */
+function obtenerIndiceColumna(nombreHoja, nombreColumna) {
+  const indice = obtenerEncabezados(nombreHoja).indexOf(nombreColumna);
+  if (indice === -1) {
+    throw crearError('CONFIGURACION', 'Columna desconocida en la hoja ' + nombreHoja + ': ' + nombreColumna);
+  }
+  return indice;
 }
 
 /**
@@ -34,6 +89,9 @@ function definirLibroMaestro(idLibro) {
     throw crearError('CONFIGURACION', 'No se pudo abrir el libro con ese ID. Verifica el ID y tus permisos de acceso.');
   }
   PropertiesService.getScriptProperties().setProperty(PROPIEDAD_LIBRO_MAESTRO, String(idLibro).trim());
+  cacheEjecucion.libro = null;
+  cacheEjecucion.hojas = {};
+  cacheEjecucion.encabezados = {};
   const preparacion = inicializarBaseDeDatos();
   return { ok: true, id: idLibro, titulo: libro.getName(), hojasCreadas: preparacion.hojasCreadas };
 }
@@ -82,15 +140,12 @@ function quitarColumnasVacias(hoja, columnasUsadas) {
  */
 function buscarFilasPorValor(nombreHoja, nombreColumna, valorBuscado, maximo) {
   const valor = String(valorBuscado === undefined || valorBuscado === null ? '' : valorBuscado).trim();
-  const hoja = obtenerLibroMaestro().getSheetByName(nombreHoja);
+  const hoja = obtenerHoja(nombreHoja);
   if (!valor || !hoja || hoja.getLastRow() < 2) {
     return [];
   }
-  const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
-  const indice = encabezados.indexOf(nombreColumna);
-  if (indice === -1) {
-    throw crearError('CONFIGURACION', 'Columna desconocida en la hoja ' + nombreHoja + ': ' + nombreColumna);
-  }
+  const encabezados = obtenerEncabezados(nombreHoja);
+  const indice = obtenerIndiceColumna(nombreHoja, nombreColumna);
   let coincidencias = hoja.getRange(2, indice + 1, hoja.getLastRow() - 1, 1)
     .createTextFinder(valor)
     .matchEntireCell(true)
@@ -120,8 +175,7 @@ function buscarFilasPorValor(nombreHoja, nombreColumna, valorBuscado, maximo) {
  * metadato interno; nunca se envia tal cual al navegador.
  */
 function leerHoja(nombreHoja) {
-  const libro = obtenerLibroMaestro();
-  const hoja = libro.getSheetByName(nombreHoja);
+  const hoja = obtenerHoja(nombreHoja);
   if (!hoja || hoja.getLastRow() < 2) {
     return [];
   }
@@ -141,8 +195,18 @@ function leerHoja(nombreHoja) {
 /**
  * Busca la primera fila cuyo valor en nombreColumna coincida
  * sin distinguir mayusculas ni espacios. Devuelve null si no existe.
+ * Primero usa TextFinder (no lee toda la hoja); si no encuentra nada,
+ * revisa la hoja completa por si la celda tiene espacios de mas.
  */
 function buscarPorClave(nombreHoja, nombreColumna, valorBuscado) {
+  const encontradas = buscarFilasPorValor(nombreHoja, nombreColumna, valorBuscado);
+  if (encontradas.length) {
+    return encontradas[0];
+  }
+  return buscarPorClaveRecorriendo(nombreHoja, nombreColumna, valorBuscado);
+}
+
+function buscarPorClaveRecorriendo(nombreHoja, nombreColumna, valorBuscado) {
   const esperado = String(valorBuscado === undefined || valorBuscado === null ? '' : valorBuscado).trim().toLowerCase();
   const filas = leerHoja(nombreHoja);
   for (let i = 0; i < filas.length; i++) {
@@ -162,12 +226,8 @@ function insertarRegistros(nombreHoja, registros) {
   if (!registros.length) {
     return 0;
   }
-  const libro = obtenerLibroMaestro();
-  const hoja = libro.getSheetByName(nombreHoja);
-  if (!hoja) {
-    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta instalarSistema() desde el editor.');
-  }
-  const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  const hoja = obtenerHojaObligatoria(nombreHoja);
+  const encabezados = obtenerEncabezados(nombreHoja);
   const filas = registros.map(function (registro) {
     return encabezados.map(function (encabezado) {
       const valor = registro[encabezado];
@@ -179,24 +239,28 @@ function insertarRegistros(nombreHoja, registros) {
 }
 
 /**
- * Actualiza columnas de una fila existente. Sin lock: el llamador debe
- * envolverlo con conBloqueoEscritura().
+ * Actualiza columnas de una fila existente con una lectura y una escritura
+ * del tramo afectado, en vez de una llamada por celda. Sin lock: el llamador
+ * debe envolverlo con conBloqueoEscritura().
  */
 function actualizarRegistro(nombreHoja, numeroFila, cambios) {
-  const libro = obtenerLibroMaestro();
-  const hoja = libro.getSheetByName(nombreHoja);
-  if (!hoja) {
-    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta instalarSistema() desde el editor.');
+  const hoja = obtenerHojaObligatoria(nombreHoja);
+  const claves = Object.keys(cambios);
+  if (!claves.length) {
+    return;
   }
-  const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
-  Object.keys(cambios).forEach(function (clave) {
-    const indice = encabezados.indexOf(clave);
-    if (indice === -1) {
-      throw crearError('CONFIGURACION', 'Columna desconocida en la hoja ' + nombreHoja + ': ' + clave);
-    }
-    const valor = cambios[clave];
-    hoja.getRange(numeroFila, indice + 1).setValue(valor === undefined || valor === null ? '' : valor);
+  const indices = claves.map(function (clave) {
+    return obtenerIndiceColumna(nombreHoja, clave);
   });
+  const primera = Math.min.apply(null, indices);
+  const ultima = Math.max.apply(null, indices);
+  const rango = hoja.getRange(numeroFila, primera + 1, 1, ultima - primera + 1);
+  const valores = rango.getValues()[0];
+  claves.forEach(function (clave, posicion) {
+    const valor = cambios[clave];
+    valores[indices[posicion] - primera] = valor === undefined || valor === null ? '' : valor;
+  });
+  rango.setValues([valores]);
 }
 
 /**
@@ -209,7 +273,7 @@ function eliminarFilas(nombreHoja, numerosFila) {
   if (nombreHoja === HOJAS.HISTORIAL) {
     throw crearError('AUTORIZACION', 'El historial no se puede eliminar (RF-31).');
   }
-  const hoja = obtenerLibroMaestro().getSheetByName(nombreHoja);
+  const hoja = obtenerHoja(nombreHoja);
   if (!hoja || !numerosFila.length) {
     return 0;
   }
@@ -240,16 +304,8 @@ function escribirColumna(nombreHoja, nombreColumna, valores) {
   if (!valores.length) {
     return 0;
   }
-  const libro = obtenerLibroMaestro();
-  const hoja = libro.getSheetByName(nombreHoja);
-  if (!hoja) {
-    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta instalarSistema() desde el editor.');
-  }
-  const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
-  const indice = encabezados.indexOf(nombreColumna);
-  if (indice === -1) {
-    throw crearError('CONFIGURACION', 'Columna desconocida en la hoja ' + nombreHoja + ': ' + nombreColumna);
-  }
+  const hoja = obtenerHojaObligatoria(nombreHoja);
+  const indice = obtenerIndiceColumna(nombreHoja, nombreColumna);
   const filas = valores.map(function (valor) {
     return [valor === undefined || valor === null ? '' : valor];
   });

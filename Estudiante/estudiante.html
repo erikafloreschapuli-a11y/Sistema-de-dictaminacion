@@ -477,6 +477,12 @@
           nombreArchivo: archivo.name,
           tipoMime: archivo.type,
           contenidoBase64: contenidoBase64
+        }, {
+          // En picos de uso el alumno espera turno; se le avisa para que no cierre la página.
+          alReintentar: function () {
+            boton.textContent = 'Mucha demanda, reintentando…';
+            mostrarAviso('Hay muchas personas subiendo documentos. Tu archivo se enviará en cuanto haya lugar; no cierres la página.', 'ok');
+          }
         });
         mostrarAviso('Documento "' + tipoDocumento + '" cargado. Ahora está en revisión.', 'ok');
         estadoPagina.historialCargado = false;

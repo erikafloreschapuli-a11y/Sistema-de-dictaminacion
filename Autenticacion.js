@@ -230,6 +230,10 @@ function protegerApi(callback) {
     if (error.codigo) {
       return { ok: false, codigo: error.codigo, mensaje: error.message };
     }
+    // Saturacion o fallas pasajeras de Google: el navegador reintenta solo.
+    if (PATRON_ERROR_TEMPORAL_GOOGLE.test(String(error.message || ''))) {
+      return { ok: false, codigo: 'OCUPADO', mensaje: 'El sistema está ocupado en este momento. Intenta de nuevo en unos segundos.' };
+    }
     return { ok: false, codigo: 'SERVIDOR', mensaje: 'Ocurrio un error inesperado en el servidor. Intenta de nuevo.' };
   }
 }
