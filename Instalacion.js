@@ -12,6 +12,7 @@
  * Antes del piloto, para empezar desde cero:  reiniciarDatosDelSistema()
  * (respalda el libro, vacia Estudiantes, Documentos e Historial y manda la
  * carpeta raiz a la papelera; conserva Usuarios y Configuracion).
+ * Solo rehacer carpetas de los alumnos ya importados:  reiniciarCarpetas()
  */
 
 /**
@@ -70,10 +71,36 @@ function reiniciarDatosDelSistema() {
     'Filas borradas: ' + HOJAS_REINICIABLES.map(function (nombreHoja) {
       return nombreHoja + ' ' + filasBorradas[nombreHoja];
     }).join(', '),
-    'Carpeta anterior: ' + (carpetaAnterior ? 'enviada a la papelera de Drive (recuperable por 30 días)' : 'no había carpeta'),
+    'Carpetas anteriores enviadas a la papelera de Drive (recuperables por 30 días): ' + carpetaAnterior,
     'Carpeta raíz nueva: ' + carpetaNueva.getUrl(),
     'Personal con acceso a la carpeta nueva: ' + permisos.conAcceso,
     'Listo: importa la lista de alumnos y se crearán sus carpetas por carrera y matrícula.'
+  ].concat(permisos.avisos);
+  console.log(resumen.join('\n'));
+  return resumen;
+}
+
+/**
+ * Solo carpetas: manda a la papelera las carpetas raiz y crea la estructura
+ * de nuevo para los alumnos que ya estan en la hoja. No borra datos de las
+ * hojas. Se niega si ya hay documentos subidos, porque sus archivos viven
+ * en las carpetas viejas y el visor dejaria de encontrarlos.
+ */
+function reiniciarCarpetas() {
+  const documentos = leerHoja(HOJAS.DOCUMENTOS).length;
+  if (documentos) {
+    throw new Error('Hay ' + documentos + ' documentos subidos. Usa reiniciarDatosDelSistema() para empezar de cero.');
+  }
+  eliminarActivadoresCarpetas();
+  const enviadas = enviarCarpetaRaizAPapelera();
+  const carpetaNueva = obtenerCarpetaRaizDrive();
+  const permisos = sincronizarPermisosCarpeta();
+  const carpetas = crearCarpetasConContinuacion(leerHoja(HOJAS.ESTUDIANTES), TIEMPO_CARPETAS_SEGUNDO_PLANO_MS);
+  const resumen = [
+    'Carpetas anteriores enviadas a la papelera de Drive: ' + enviadas,
+    'Carpeta raíz nueva: ' + carpetaNueva.getUrl(),
+    'Personal con acceso a la carpeta nueva: ' + permisos.conAcceso,
+    'Carpetas de alumnos creadas: ' + carpetas.creadas + '; pendientes (se terminan en segundo plano): ' + carpetas.pendientes
   ].concat(permisos.avisos);
   console.log(resumen.join('\n'));
   return resumen;
@@ -88,23 +115,50 @@ function respaldarLibroMaestro(libro) {
 }
 
 /**
- * Manda a la papelera la carpeta raiz actual y olvida su ID, para que la
- * siguiente ejecucion cree una nueva. Devuelve false si no habia carpeta.
+ * Manda a la papelera la carpeta raiz guardada y TODAS las carpetas propias
+ * con el nombre de la carpeta raiz, y olvida el ID guardado para que la
+ * siguiente ejecucion cree una nueva. Buscar por nombre cubre carpetas
+ * creadas por versiones anteriores, que no guardaban su ID, y duplicados;
+ * sin eso la carpeta vieja se volvia a usar. Devuelve cuantas envio.
  */
 function enviarCarpetaRaizAPapelera() {
   const propiedades = PropertiesService.getScriptProperties();
   const idGuardado = propiedades.getProperty(PROPIEDAD_CARPETA_RAIZ_DRIVE);
   propiedades.deleteProperty(PROPIEDAD_CARPETA_RAIZ_DRIVE);
-  if (!idGuardado) {
-    return false;
+
+  const propietario = normalizarCorreo(Session.getEffectiveUser().getEmail());
+  const candidatas = {};
+  if (idGuardado) {
+    try {
+      const guardada = DriveApp.getFolderById(idGuardado);
+      candidatas[guardada.getId()] = guardada;
+    } catch (error) {
+      console.warn('La carpeta raíz guardada ya no existe: ' + error.message);
+    }
   }
-  try {
-    DriveApp.getFolderById(idGuardado).setTrashed(true);
-    return true;
-  } catch (error) {
-    console.warn('No se pudo enviar a la papelera la carpeta raíz: ' + error.message);
-    return false;
+  const porNombre = DriveApp.getFoldersByName(NOMBRE_CARPETA_RAIZ_DRIVE);
+  while (porNombre.hasNext()) {
+    const carpeta = porNombre.next();
+    // Solo las propias: una carpeta compartida por otra persona no se toca.
+    if (normalizarCorreo(carpeta.getOwner() && carpeta.getOwner().getEmail()) === propietario) {
+      candidatas[carpeta.getId()] = carpeta;
+    }
   }
+
+  let enviadas = 0;
+  Object.keys(candidatas).forEach(function (id) {
+    const carpeta = candidatas[id];
+    if (carpeta.isTrashed()) {
+      return;
+    }
+    try {
+      carpeta.setTrashed(true);
+      enviadas++;
+    } catch (error) {
+      console.warn('No se pudo enviar a la papelera la carpeta ' + id + ': ' + error.message);
+    }
+  });
+  return enviadas;
 }
 
 /**
