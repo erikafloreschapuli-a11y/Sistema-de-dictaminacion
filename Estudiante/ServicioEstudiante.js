@@ -108,14 +108,23 @@ function procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos) {
   const nombreArchivo = construirNombreArchivo(estudiante.matricula, tipoDocumento, archivo.extension);
   const archivoDrive = carpeta.createFile(Utilities.newBlob(archivo.bytes, archivo.mime, nombreArchivo));
 
+  let resultado;
   try {
-    return conBloqueoEscritura(function () {
+    resultado = conBloqueoEscritura(function () {
       return registrarCargaDocumento(usuario, estudiante, tipoDocumento, archivoDrive.getUrl());
     });
   } catch (error) {
     descartarArchivo(archivoDrive);
     throw error;
   }
+
+  // El archivo observado ya no sirve una vez que llega el corregido: no se
+  // conserva en Drive. Se hace fuera del bloqueo para no retener la hoja.
+  if (resultado.urlArchivoReemplazado) {
+    descartarArchivoPorUrl(resultado.urlArchivoReemplazado);
+  }
+  delete resultado.urlArchivoReemplazado;
+  return resultado;
 }
 
 /**
@@ -130,6 +139,10 @@ function registrarCargaDocumento(usuario, estudiante, tipoDocumento, urlArchivo)
     ? normalizarEstatusDocumento(documentoActual.estatus)
     : ESTATUS_DOCUMENTO.PENDIENTE;
   validarEstatusParaCarga(estatusAnterior);
+  // Se toma antes de actualizar el registro, que sobrescribe url_archivo.
+  const urlArchivoReemplazado = documentoActual && documentoActual.url_archivo
+    ? String(documentoActual.url_archivo)
+    : '';
 
   const cambios = {
     url_archivo: urlArchivo,
@@ -167,8 +180,22 @@ function registrarCargaDocumento(usuario, estudiante, tipoDocumento, urlArchivo)
   return {
     ok: true,
     mensaje: 'Documento cargado. Queda en revisión por el dictaminador.',
-    documento: convertirDocumento(registro, tipoDocumento)
+    documento: convertirDocumento(registro, tipoDocumento),
+    // Uso interno: procesarCargaDocumento lo manda a la papelera y lo quita.
+    urlArchivoReemplazado: urlArchivoReemplazado !== urlArchivo ? urlArchivoReemplazado : ''
   };
+}
+
+/**
+ * Manda a la papelera el archivo anterior de un documento. Si falla, solo se
+ * registra: la carga nueva ya quedo guardada y es lo que importa al alumno.
+ */
+function descartarArchivoPorUrl(urlArchivo) {
+  try {
+    abrirArchivoDrive(urlArchivo).setTrashed(true);
+  } catch (error) {
+    console.error('No se pudo descartar el archivo reemplazado ' + urlArchivo + ': ' + error.message);
+  }
 }
 
 /**
