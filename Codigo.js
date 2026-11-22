@@ -106,8 +106,18 @@ function construirDatosCabecera(usuario) {
   return {
     urlApp: urlApp,
     urlSalir: urlApp + '?accion=' + ACCIONES_SESION.SALIR,
-    iniciales: obtenerIniciales(usuario.nombre || usuario.correo)
+    iniciales: obtenerIniciales(usuario.nombre || usuario.correo),
+    srcLogo: obtenerSrcLogo()
   };
+}
+
+/**
+ * Escudo como data URI: la pagina corre en un iframe de googleusercontent.com
+ * y no puede leer archivos del proyecto por URL. Las vistas lo imprimen con
+ * <?!= ?> porque el escape automatico bloquea data: en atributos src.
+ */
+function obtenerSrcLogo() {
+  return 'data:image/png;base64,' + LOGO_INSTITUCIONAL_BASE64;
 }
 
 function obtenerIniciales(texto) {
@@ -154,6 +164,7 @@ function construirPaginaInicio(opciones) {
   plantilla.dominioPersonal = DOMINIO_TRABAJADORES;
   plantilla.dominioEstudiante = DOMINIO_ESTUDIANTE;
   plantilla.generacion = String(obtenerValorConfiguracionSegura('GENERACION_ACTIVA'));
+  plantilla.srcLogo = obtenerSrcLogo();
   return finalizarPagina(plantilla.evaluate(), 'Iniciar sesión - ' + TITULO_APLICACION);
 }
 
