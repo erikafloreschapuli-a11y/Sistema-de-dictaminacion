@@ -18,20 +18,41 @@ function obtenerCarpetaRaizDrive() {
   const propiedades = PropertiesService.getScriptProperties();
   const idGuardado = propiedades.getProperty(PROPIEDAD_CARPETA_RAIZ_DRIVE);
   if (idGuardado) {
+    let guardada;
     try {
-      return DriveApp.getFolderById(idGuardado);
+      guardada = DriveApp.getFolderById(idGuardado);
     } catch (error) {
       throw crearError(
         'DRIVE',
         'No se pudo abrir la carpeta raíz de Drive. Verifica que exista y que el ID guardado sea correcto.'
       );
     }
+    if (!guardada.isTrashed()) {
+      return guardada;
+    }
+    // Alguien la mando a la papelera (o se reinicio el sistema): se crea otra.
+    propiedades.deleteProperty(PROPIEDAD_CARPETA_RAIZ_DRIVE);
   }
   const raiz = DriveApp.getRootFolder();
-  const existentes = raiz.getFoldersByName(NOMBRE_CARPETA_RAIZ_DRIVE);
-  const carpeta = existentes.hasNext() ? existentes.next() : raiz.createFolder(NOMBRE_CARPETA_RAIZ_DRIVE);
+  const carpeta = buscarCarpetaActiva(raiz.getFoldersByName(NOMBRE_CARPETA_RAIZ_DRIVE)) ||
+    raiz.createFolder(NOMBRE_CARPETA_RAIZ_DRIVE);
   propiedades.setProperty(PROPIEDAD_CARPETA_RAIZ_DRIVE, carpeta.getId());
   return carpeta;
+}
+
+/**
+ * Primera carpeta del iterador que no este en la papelera, o null.
+ * Drive sigue entregando carpetas de la papelera en busquedas y por ID; si
+ * no se filtran, los archivos nuevos terminarian guardados en la papelera.
+ */
+function buscarCarpetaActiva(iterador) {
+  while (iterador.hasNext()) {
+    const carpeta = iterador.next();
+    if (!carpeta.isTrashed()) {
+      return carpeta;
+    }
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -64,11 +85,14 @@ function obtenerCarpetaExpediente(estudiante) {
   const idEnCache = cache.get(claveCache);
   if (idEnCache) {
     try {
-      return DriveApp.getFolderById(idEnCache);
+      const enCache = DriveApp.getFolderById(idEnCache);
+      if (!enCache.isTrashed()) {
+        return enCache;
+      }
     } catch (error) {
-      // La carpeta fue movida o borrada: se vuelve a resolver por nombre.
-      cache.remove(claveCache);
+      // La carpeta fue borrada definitivamente: se vuelve a resolver por nombre.
     }
+    cache.remove(claveCache);
   }
 
   const carpetaGeneracion = obtenerOCrearCarpeta(obtenerCarpetaRaizDrive(), obtenerNombreCarpetaGeneracion(estudiante));
@@ -83,11 +107,7 @@ function obtenerCarpetaExpediente(estudiante) {
  */
 function obtenerOCrearCarpeta(carpetaPadre, nombre) {
   const nombreLimpio = String(nombre || '').trim() || CARPETA_SIN_GENERACION;
-  const existentes = carpetaPadre.getFoldersByName(nombreLimpio);
-  if (existentes.hasNext()) {
-    return existentes.next();
-  }
-  return carpetaPadre.createFolder(nombreLimpio);
+  return buscarCarpetaActiva(carpetaPadre.getFoldersByName(nombreLimpio)) || carpetaPadre.createFolder(nombreLimpio);
 }
 
 /**
@@ -99,7 +119,9 @@ function listarSubcarpetas(carpetaPadre) {
   const iterador = carpetaPadre.getFolders();
   while (iterador.hasNext()) {
     const carpeta = iterador.next();
-    subcarpetas[carpeta.getName()] = carpeta;
+    if (!carpeta.isTrashed()) {
+      subcarpetas[carpeta.getName()] = carpeta;
+    }
   }
   return subcarpetas;
 }

@@ -296,6 +296,26 @@ function eliminarFilas(nombreHoja, numerosFila) {
 }
 
 /**
+ * Borra todas las filas de datos y deja solo los encabezados. Solo la usa
+ * reiniciarDatosDelSistema, que se ejecuta a mano desde el editor. Sin lock:
+ * el llamador debe envolverlo con conBloqueoEscritura().
+ */
+function vaciarHoja(nombreHoja) {
+  const hoja = obtenerHoja(nombreHoja);
+  if (!hoja || hoja.getLastRow() < 2) {
+    return 0;
+  }
+  const filas = hoja.getLastRow() - 1;
+  // Sheets no permite borrar todas las filas no congeladas: si la hoja
+  // termina justo en la ultima fila con datos, se agrega una vacia antes.
+  if (hoja.getMaxRows() === hoja.getLastRow()) {
+    hoja.insertRowsAfter(hoja.getMaxRows(), 1);
+  }
+  hoja.deleteRows(2, filas);
+  return filas;
+}
+
+/**
  * Sobrescribe una columna completa desde la fila 2, en el mismo orden que
  * devuelve leerHoja(). Una sola llamada evita agotar el tiempo con miles de
  * filas (RNF-04). Sin lock: el llamador debe envolverlo con conBloqueoEscritura().

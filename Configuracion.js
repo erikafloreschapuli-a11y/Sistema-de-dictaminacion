@@ -188,6 +188,11 @@ const NOMBRE_GRUPO_PRUEBA = 'Prueba de carga';
 const MAXIMO_ALUMNOS_PRUEBA = 200;
 const DIGITOS_MATRICULA_PRUEBA = 4;
 
+// Hojas que vacia reiniciarDatosDelSistema (Instalacion.js). Usuarios y
+// Configuracion se conservan.
+const HOJAS_REINICIABLES = [HOJAS.ESTUDIANTES, HOJAS.DOCUMENTOS, HOJAS.HISTORIAL];
+const PREFIJO_RESPALDO_LIBRO = 'Respaldo antes de reinicio - ';
+
 // Conversion de unidades para validar el tamano maximo (RF-10).
 const BYTES_POR_MEGABYTE = 1024 * 1024;
 
