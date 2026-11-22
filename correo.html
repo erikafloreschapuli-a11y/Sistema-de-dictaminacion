@@ -1,0 +1,131 @@
+<!-- correo.html - Formato de los correos automaticos al estudiante (RF-27 a RF-29).
+     Los clientes de correo (Gmail, Outlook) ignoran hojas de estilo y la
+     mayoria del CSS moderno: por eso se usan tablas y estilos en linea.
+     Datos: titulo, colorTitulo, estudiante, parrafos, documentos, urlApp,
+     generacion, fecha, area. Los <?= ?> escapan el texto automaticamente. -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><?= titulo ?></title>
+</head>
+<body style="margin:0;padding:0;background:#eef2ef;font-family:Arial,Helvetica,sans-serif;color:#17231c;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2ef;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #d5ddd8;border-radius:10px;overflow:hidden;">
+
+          <!-- Encabezado institucional -->
+          <tr>
+            <td style="padding:20px 24px;background:#14532d;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="52" valign="middle">
+                    <div style="width:46px;height:46px;line-height:46px;border-radius:10px;background:#ffffff;color:#14532d;font-weight:bold;font-size:14px;text-align:center;">UTP</div>
+                  </td>
+                  <td valign="middle" style="padding-left:12px;color:#ffffff;">
+                    <div style="font-size:19px;font-weight:bold;">Universidad Tecnológica de Puebla</div>
+                    <div style="font-size:12px;opacity:0.85;margin-top:2px;"><?= area ?></div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Titulo del aviso -->
+          <tr>
+            <td align="center" style="padding:14px 24px;background:<?= colorTitulo ?>;color:#ffffff;">
+              <div style="font-size:17px;font-weight:bold;"><?= titulo ?></div>
+              <div style="font-size:13px;margin-top:2px;">Expediente de nuevo ingreso <?= generacion ?></div>
+            </td>
+          </tr>
+
+          <!-- Datos del estudiante -->
+          <tr>
+            <td style="padding:20px 24px 6px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
+                <tr>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;width:150px;white-space:nowrap;">Nombre</td>
+                  <td style="padding:4px 0;font-weight:bold;"><?= estudiante.nombre ?></td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;white-space:nowrap;">Matrícula</td>
+                  <td style="padding:4px 0;font-weight:bold;color:#15803d;font-size:16px;"><?= estudiante.matricula ?></td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;white-space:nowrap;">Programa educativo</td>
+                  <td style="padding:4px 0;"><?= estudiante.carrera ?></td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;white-space:nowrap;">Correo</td>
+                  <td style="padding:4px 0;"><?= estudiante.correo ?></td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Mensaje editable por el Administrador (plantilla) -->
+          <tr>
+            <td style="padding:12px 24px 4px;font-size:15px;line-height:1.55;">
+              <? parrafos.forEach(function (parrafo) { ?>
+                <p style="margin:0 0 12px;"><?= parrafo ?></p>
+              <? }); ?>
+            </td>
+          </tr>
+
+          <!-- Estatus de los documentos -->
+          <tr>
+            <td style="padding:6px 24px 8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;border:1px solid #c9d5cd;">
+                <tr style="background:#e5ebe7;">
+                  <th align="left" style="padding:10px 12px;border:1px solid #c9d5cd;font-size:13px;">Documento</th>
+                  <th align="center" style="padding:10px 12px;border:1px solid #c9d5cd;font-size:13px;width:120px;">Estatus</th>
+                </tr>
+                <? documentos.forEach(function (documento) { ?>
+                  <tr style="background:<?= documento.destacado ? '#fef2f2' : '#ffffff' ?>;">
+                    <td style="padding:10px 12px;border:1px solid #c9d5cd;">
+                      <strong><?= documento.tipo ?></strong>
+                      <? if (documento.observacion) { ?>
+                        <div style="margin-top:6px;padding:8px 10px;border-left:3px solid #b91c1c;background:#ffffff;color:#7f1d1d;font-size:13px;">
+                          <strong>Observación:</strong> <?= documento.observacion ?>
+                        </div>
+                      <? } ?>
+                    </td>
+                    <td align="center" style="padding:10px 12px;border:1px solid #c9d5cd;">
+                      <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:bold;background:<?= documento.colorFondo ?>;color:<?= documento.colorTexto ?>;"><?= documento.estatus ?></span>
+                    </td>
+                  </tr>
+                <? }); ?>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Boton al sistema -->
+          <? if (urlApp) { ?>
+            <tr>
+              <td align="center" style="padding:18px 24px 6px;">
+                <a href="<?= urlApp ?>" style="display:inline-block;padding:12px 26px;border-radius:8px;background:#15803d;color:#ffffff;font-weight:bold;font-size:15px;text-decoration:none;">Ir al sistema</a>
+              </td>
+            </tr>
+          <? } ?>
+
+          <!-- Pie -->
+          <tr>
+            <td style="padding:18px 24px 22px;">
+              <div style="padding:12px 14px;border:1px solid #d5ddd8;border-radius:8px;background:#f8faf9;font-size:12px;line-height:1.5;color:#5d6d63;">
+                Será responsabilidad del estudiante entregar la documentación completa. En caso de observaciones en alguno de los documentos,
+                recibirás un correo como este con las acciones que debes realizar para solventarlas.
+              </div>
+              <div style="margin-top:12px;font-size:11px;color:#8a978f;">
+                Correo generado automáticamente el <?= fecha ?>. Por favor no respondas a este mensaje.
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

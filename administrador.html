@@ -212,6 +212,7 @@
 
           <div class="formulario-acciones">
             <button type="submit" class="boton" id="boton-guardar-plantillas">Guardar plantillas</button>
+            <button type="button" class="boton boton-secundario" id="boton-restaurar-plantillas">Restaurar textos predeterminados</button>
           </div>
         </form>
       </div>
@@ -396,6 +397,7 @@
 
       document.getElementById('form-configuracion').addEventListener('submit', guardarConfiguracion);
       document.getElementById('form-plantillas').addEventListener('submit', guardarPlantillas);
+      document.getElementById('boton-restaurar-plantillas').addEventListener('click', restaurarPlantillas);
 
       document.getElementById('form-prueba').addEventListener('submit', ejecutarPruebaCarga);
       document.getElementById('boton-limpiar-prueba').addEventListener('click', limpiarPruebaCarga);
@@ -847,6 +849,7 @@
         const respuesta = await api('apiObtenerConfiguracion');
         mostrarConfiguracion(respuesta.configuracion);
         mostrarPlantillas(respuesta.configuracion, respuesta.marcadores);
+        estadoPagina.plantillasPredeterminadas = respuesta.plantillasPredeterminadas;
       } catch (error) {
         estadoPagina.cargado.configuracion = false;
         mostrarAviso(error.message, 'error');
@@ -873,6 +876,18 @@
             (marcadores[clave] || []).map(function (marcador) { return '{{' + marcador + '}}'; }).join(', ');
         });
       }
+    }
+
+    /**
+     * Solo llena los campos; el Administrador revisa y presiona Guardar.
+     */
+    function restaurarPlantillas() {
+      if (!estadoPagina.plantillasPredeterminadas) {
+        mostrarAviso('Espera a que cargue la configuración.', 'error');
+        return;
+      }
+      mostrarPlantillas(estadoPagina.plantillasPredeterminadas);
+      mostrarAviso('Se cargaron los textos predeterminados. Revisa y presiona "Guardar plantillas".', 'ok');
     }
 
     async function guardarPlantillas(evento) {

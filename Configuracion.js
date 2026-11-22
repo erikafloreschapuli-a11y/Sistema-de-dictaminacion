@@ -68,30 +68,24 @@ const RANGO_TAMANIO_ARCHIVO_MB = { MINIMO: 2, MAXIMO: 5 };
 
 // Plantillas de correo predeterminadas (RF-29). Los marcadores {{clave}}
 // se sustituyen al enviar; el Administrador puede editarlas en su panel.
+// Son solo el mensaje: los datos del alumno, la tabla de documentos con la
+// observacion y el pie los agrega el formato de correo.html.
 const PLANTILLAS_CORREO_PREDETERMINADAS = {
   ASUNTO_CORREO_OBSERVADO: 'Documento observado - Dictaminación UTP {{generacion}}',
   PLANTILLA_CORREO_OBSERVADO: [
     'Hola {{nombre}}:',
     '',
-    'Tu documento "{{documento}}" fue observado durante la revisión de tu expediente (matrícula {{matricula}}).',
+    'Revisamos tu expediente y tu documento "{{documento}}" necesita corrección. Abajo encontrarás la observación del dictaminador.',
     '',
-    'Observación del dictaminador:',
-    '{{observacion}}',
-    '',
-    'Ingresa al sistema para corregir o volver a cargar el documento.',
-    '',
-    'Dictaminado por: {{dictaminador}}',
-    'Universidad Tecnológica de Puebla'
+    'Ingresa al sistema, corrige el documento y vuelve a subirlo en formato PDF.'
   ].join('\n'),
   ASUNTO_CORREO_COMPLETO: 'Expediente completo - Dictaminación UTP {{generacion}}',
   PLANTILLA_CORREO_COMPLETO: [
     'Hola {{nombre}}:',
     '',
-    'Tu expediente de nuevo ingreso (matrícula {{matricula}}) quedó completo y todos tus documentos fueron aprobados.',
+    '¡Felicidades! Todos tus documentos fueron aprobados y tu expediente de nuevo ingreso quedó completo.',
     '',
-    'Ya no necesitas realizar ninguna acción en el sistema.',
-    '',
-    'Universidad Tecnológica de Puebla'
+    'Ya no necesitas realizar ninguna acción en el sistema.'
   ].join('\n')
 };
 

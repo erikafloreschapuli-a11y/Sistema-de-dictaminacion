@@ -137,9 +137,9 @@ function apiDictaminarDocumento(datos) {
     const expedienteCompleto = resultado.expediente.estatus === ESTATUS_EXPEDIENTE.COMPLETO;
     let notificacion = null;
     if (estatusNuevo === ESTATUS_DOCUMENTO.OBSERVADO) {
-      notificacion = notificarDocumentoObservado(resultado.estudiante, tipoDocumento, observacion, usuario);
+      notificacion = notificarDocumentoObservado(resultado.estudiante, resultado.expediente, tipoDocumento, observacion, usuario);
     } else if (expedienteCompleto) {
-      notificacion = notificarExpedienteCompleto(resultado.estudiante);
+      notificacion = notificarExpedienteCompleto(resultado.estudiante, resultado.expediente);
     }
 
     return {

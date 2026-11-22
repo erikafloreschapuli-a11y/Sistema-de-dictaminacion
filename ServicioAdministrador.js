@@ -283,7 +283,12 @@ function apiObtenerConfiguracion() {
     });
     // Se muestran los formatos que realmente se aplican, no los guardados en la hoja.
     configuracion.TIPOS_PERMITIDOS = obtenerTiposPermitidos().join(',');
-    return { ok: true, configuracion: configuracion, marcadores: MARCADORES_PLANTILLA };
+    return {
+      ok: true,
+      configuracion: configuracion,
+      marcadores: MARCADORES_PLANTILLA,
+      plantillasPredeterminadas: PLANTILLAS_CORREO_PREDETERMINADAS
+    };
   });
 }
 
