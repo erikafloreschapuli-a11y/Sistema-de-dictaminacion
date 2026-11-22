@@ -200,6 +200,38 @@ function actualizarRegistro(nombreHoja, numeroFila, cambios) {
 }
 
 /**
+ * Elimina filas por numero, de abajo hacia arriba para que los numeros no
+ * se recorran, agrupando filas contiguas en una sola llamada.
+ * Nunca se usa sobre Historial (RF-31). Sin lock: el llamador debe
+ * envolverlo con conBloqueoEscritura().
+ */
+function eliminarFilas(nombreHoja, numerosFila) {
+  if (nombreHoja === HOJAS.HISTORIAL) {
+    throw crearError('AUTORIZACION', 'El historial no se puede eliminar (RF-31).');
+  }
+  const hoja = obtenerLibroMaestro().getSheetByName(nombreHoja);
+  if (!hoja || !numerosFila.length) {
+    return 0;
+  }
+  const ordenadas = numerosFila.slice().sort(function (a, b) { return b - a; });
+  let inicioBloque = ordenadas[0];
+  let tamanoBloque = 1;
+  for (let i = 1; i <= ordenadas.length; i++) {
+    if (i < ordenadas.length && ordenadas[i] === inicioBloque - 1) {
+      inicioBloque = ordenadas[i];
+      tamanoBloque++;
+    } else {
+      hoja.deleteRows(inicioBloque, tamanoBloque);
+      if (i < ordenadas.length) {
+        inicioBloque = ordenadas[i];
+        tamanoBloque = 1;
+      }
+    }
+  }
+  return ordenadas.length;
+}
+
+/**
  * Sobrescribe una columna completa desde la fila 2, en el mismo orden que
  * devuelve leerHoja(). Una sola llamada evita agotar el tiempo con miles de
  * filas (RNF-04). Sin lock: el llamador debe envolverlo con conBloqueoEscritura().

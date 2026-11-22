@@ -88,26 +88,34 @@ function apiSubirDocumento(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.ESTUDIANTE]);
     const tipoDocumento = obtenerTipoDocumentoValido(datos && datos.tipoDocumento);
-    const archivo = prepararArchivoParaCarga(datos || {});
     const estudiante = obtenerEstudianteParaUsuario(usuario, datos && datos.matricula);
-
-    // Revision previa sin bloqueo para no subir un archivo que se rechazara.
-    const documentoPrevio = buscarDocumentoDeEstudiante(estudiante.matricula, tipoDocumento);
-    validarEstatusParaCarga(documentoPrevio ? normalizarEstatusDocumento(documentoPrevio.estatus) : ESTATUS_DOCUMENTO.PENDIENTE);
-
-    const carpeta = obtenerCarpetaExpediente(estudiante);
-    const nombreArchivo = construirNombreArchivo(estudiante.matricula, tipoDocumento, archivo.extension);
-    const archivoDrive = carpeta.createFile(Utilities.newBlob(archivo.bytes, archivo.mime, nombreArchivo));
-
-    try {
-      return conBloqueoEscritura(function () {
-        return registrarCargaDocumento(usuario, estudiante, tipoDocumento, archivoDrive.getUrl());
-      });
-    } catch (error) {
-      descartarArchivo(archivoDrive);
-      throw error;
-    }
+    return procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos || {});
   });
+}
+
+/**
+ * Valida, guarda en Drive y registra un documento. La usan la carga real y
+ * la prueba de carga (ServicioPruebaCarga.js), para medir el mismo codigo.
+ */
+function procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos) {
+  const archivo = prepararArchivoParaCarga(datos);
+
+  // Revision previa sin bloqueo para no subir un archivo que se rechazara.
+  const documentoPrevio = buscarDocumentoDeEstudiante(estudiante.matricula, tipoDocumento);
+  validarEstatusParaCarga(documentoPrevio ? normalizarEstatusDocumento(documentoPrevio.estatus) : ESTATUS_DOCUMENTO.PENDIENTE);
+
+  const carpeta = obtenerCarpetaExpediente(estudiante);
+  const nombreArchivo = construirNombreArchivo(estudiante.matricula, tipoDocumento, archivo.extension);
+  const archivoDrive = carpeta.createFile(Utilities.newBlob(archivo.bytes, archivo.mime, nombreArchivo));
+
+  try {
+    return conBloqueoEscritura(function () {
+      return registrarCargaDocumento(usuario, estudiante, tipoDocumento, archivoDrive.getUrl());
+    });
+  } catch (error) {
+    descartarArchivo(archivoDrive);
+    throw error;
+  }
 }
 
 /**

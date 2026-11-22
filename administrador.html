@@ -15,6 +15,18 @@
     .rejilla-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; align-items: start; }
     .rejilla-dos .panel { margin-bottom: 0; }
     .tarjetas + .panel { margin-top: 18px; }
+    .aviso-prueba { margin-bottom: 16px; font-size: 13px; }
+    .progreso-prueba { height: 10px; border-radius: 999px; background: var(--gris-100); overflow: hidden; margin: 10px 0; }
+    .progreso-prueba span { display: block; height: 100%; width: 0; background: var(--verde-600); transition: width 0.2s; }
+    .lista-verificacion { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; font-size: 14px; }
+    .lista-verificacion li { display: flex; gap: 8px; align-items: flex-start; }
+    .verificacion-ok { color: var(--verde-800); }
+    .verificacion-error { color: var(--rojo-700); }
+    .reporte-grupo { margin: 22px 0 10px; font-size: 14px; font-weight: 600; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.04em; }
+    .reporte-grupo:first-child { margin-top: 0; }
+    .tarjeta-porcentaje { font-size: 14px; font-weight: 600; color: var(--texto-suave); }
+    .barra-avance { width: 120px; height: 8px; border-radius: 999px; background: var(--gris-100); overflow: hidden; }
+    .barra-avance span { display: block; height: 100%; background: var(--verde-600); }
   </style>
 </head>
 <body data-url-app="<?= cabecera.urlApp ?>">
@@ -45,6 +57,7 @@
     <button type="button" class="menu-boton" data-seccion="estudiantes"><i data-icono="subir"></i>Importar estudiantes</button>
     <button type="button" class="menu-boton" data-seccion="configuracion"><i data-icono="ajustes"></i>Configuración</button>
     <button type="button" class="menu-boton" data-seccion="historial"><i data-icono="historial"></i>Historial</button>
+    <button type="button" class="menu-boton" data-seccion="prueba"><i data-icono="reloj"></i>Prueba de carga</button>
     <span class="menu-separador"></span>
     <a class="menu-boton" href="<?= cabecera.urlApp ?>?panel=dictaminador" target="_top"><i data-icono="revisar"></i>Ir a dictaminar</a>
   </nav>
@@ -57,7 +70,7 @@
         <h2 class="seccion-titulo">Reportes generales</h2>
         <p class="seccion-descripcion">Resumen del avance de los expedientes de nuevo ingreso.</p>
       </div>
-      <div class="tarjetas" id="contenedor-reportes">
+      <div id="contenedor-reportes">
         <p class="cargando">Cargando reportes...</p>
       </div>
     </section>
@@ -259,6 +272,46 @@
       </div>
     </section>
 
+    <!-- Criterio de aceptacion: cargas simultaneas sin perdida de datos -->
+    <section id="seccion-prueba" class="seccion" hidden>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Prueba de carga</h2>
+        <p class="seccion-descripcion">Simula a muchos alumnos subiendo su CURP al mismo tiempo, con el mismo código que usan los alumnos, y revisa que no se pierda ni se duplique ningún registro.</p>
+      </div>
+
+      <div class="panel">
+        <div class="resultado-error aviso-prueba">
+          Usa datos reales de Drive y de la hoja. Los alumnos de prueba (matrícula <code>PRUEBA-0001</code>, …) no aparecen
+          en reportes ni para dictaminar. Al terminar, presiona <strong>Limpiar datos de prueba</strong>.
+          Sus registros del historial se conservan, porque el historial no se puede borrar.
+        </div>
+        <form id="form-prueba" class="formulario">
+          <label class="campo">Alumnos simultáneos
+            <select id="prueba-cantidad">
+              <option value="10">10</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+          </label>
+          <label class="campo">Tamaño de cada PDF
+            <select id="prueba-tamano">
+              <option value="100">100 KB</option>
+              <option value="1024">1 MB</option>
+              <option value="5120">5 MB (máximo permitido)</option>
+            </select>
+          </label>
+          <div class="formulario-acciones">
+            <button type="submit" class="boton" id="boton-ejecutar-prueba"><i data-icono="subir"></i>Ejecutar prueba</button>
+            <button type="button" class="boton boton-peligro" id="boton-limpiar-prueba">Limpiar datos de prueba</button>
+          </div>
+        </form>
+        <p class="ayuda" id="ayuda-prueba">Se subirán en total 1 MB desde tu conexión.</p>
+      </div>
+
+      <div class="panel" id="resultado-prueba" hidden></div>
+    </section>
+
   </main>
   </div>
 
@@ -279,14 +332,39 @@
       correoActual: ''
     };
 
-    const DEFINICION_REPORTES = [
-      { clave: 'totalAlumnos', etiqueta: 'Total de alumnos', clase: 'tarjeta-neutro', icono: 'usuarios' },
-      { clave: 'pendientes', etiqueta: 'Documentos pendientes', clase: 'tarjeta-gris', icono: 'documento' },
-      { clave: 'enRevision', etiqueta: 'En revisión', clase: 'tarjeta-azul', icono: 'reloj' },
-      { clave: 'aprobados', etiqueta: 'Aprobados', clase: 'tarjeta-verde', icono: 'check' },
-      { clave: 'observados', etiqueta: 'Observados', clase: 'tarjeta-rojo', icono: 'alerta' },
-      { clave: 'expedientesCompletos', etiqueta: 'Expedientes completos', clase: 'tarjeta-verde', icono: 'carpeta' },
-      { clave: 'cuotaCorreosRestante', etiqueta: 'Correos disponibles hoy', clase: 'tarjeta-neutro', icono: 'correo' }
+    // Indicadores agrupados: primero alumnos (lo que se pregunta en juntas:
+    // "cuantos faltan"), luego documentos y el estado del correo.
+    const GRUPOS_REPORTES = [
+      {
+        titulo: 'Alumnos',
+        tarjetas: [
+          { clave: 'totalAlumnos', etiqueta: 'Total de alumnos', clase: 'tarjeta-neutro', icono: 'usuarios' },
+          { clave: 'alumnosSinDocumentos', etiqueta: 'Sin ningún documento', clase: 'tarjeta-gris', icono: 'documento' },
+          { clave: 'alumnosConFaltantes', etiqueta: 'Con documentos por subir', clase: 'tarjeta-gris', icono: 'subir' },
+          { clave: 'alumnosPorRevisar', etiqueta: 'Por revisar', clase: 'tarjeta-azul', icono: 'reloj' },
+          { clave: 'alumnosConObservaciones', etiqueta: 'Con observaciones', clase: 'tarjeta-rojo', icono: 'alerta' },
+          { clave: 'expedientesCompletos', etiqueta: 'Expedientes completos', clase: 'tarjeta-verde', icono: 'carpeta' }
+        ]
+      },
+      {
+        titulo: 'Documentos',
+        tarjetas: [
+          { clave: 'pendientes', etiqueta: 'Sin subir', clase: 'tarjeta-gris', icono: 'documento' },
+          { clave: 'enRevision', etiqueta: 'En revisión', clase: 'tarjeta-azul', icono: 'reloj' },
+          { clave: 'aprobados', etiqueta: 'Aprobados', clase: 'tarjeta-verde', icono: 'check' },
+          { clave: 'observados', etiqueta: 'Observados', clase: 'tarjeta-rojo', icono: 'alerta' },
+          { clave: 'cuotaCorreosRestante', etiqueta: 'Correos disponibles hoy', clase: 'tarjeta-neutro', icono: 'correo' }
+        ]
+      }
+    ];
+
+    const COLUMNAS_REPORTE_CARRERA = [
+      { clave: 'totalAlumnos', etiqueta: 'Alumnos' },
+      { clave: 'alumnosSinDocumentos', etiqueta: 'Sin documentos' },
+      { clave: 'alumnosConFaltantes', etiqueta: 'Por subir' },
+      { clave: 'alumnosPorRevisar', etiqueta: 'Por revisar' },
+      { clave: 'alumnosConObservaciones', etiqueta: 'Con observaciones' },
+      { clave: 'expedientesCompletos', etiqueta: 'Completos' }
     ];
 
     const CLAVES_PLANTILLAS = [
@@ -318,6 +396,12 @@
 
       document.getElementById('form-configuracion').addEventListener('submit', guardarConfiguracion);
       document.getElementById('form-plantillas').addEventListener('submit', guardarPlantillas);
+
+      document.getElementById('form-prueba').addEventListener('submit', ejecutarPruebaCarga);
+      document.getElementById('boton-limpiar-prueba').addEventListener('click', limpiarPruebaCarga);
+      document.getElementById('prueba-cantidad').addEventListener('change', actualizarAyudaPrueba);
+      document.getElementById('prueba-tamano').addEventListener('change', actualizarAyudaPrueba);
+      actualizarAyudaPrueba();
 
       document.getElementById('form-historial').addEventListener('submit', function (evento) {
         evento.preventDefault();
@@ -364,20 +448,169 @@
       contenedor.innerHTML = '<p class="cargando">Cargando reportes...</p>';
       try {
         const respuesta = await api('apiObtenerReportesGenerales');
-        contenedor.innerHTML = DEFINICION_REPORTES.map(function (item) {
-          const dato = respuesta.reportes[item.clave];
-          // null indica que Google no informo la cuota; se muestra un guion en vez de 0.
-          const valor = dato === null ? '—' : (dato === undefined ? 0 : dato);
-          return '<article class="tarjeta ' + item.clase + '">' +
-            '<div class="tarjeta-icono">' + icono(item.icono) + '</div>' +
-            '<p class="tarjeta-valor">' + escapeHtml(valor) + '</p>' +
-            '<p class="tarjeta-etiqueta">' + item.etiqueta + '</p>' +
-            '</article>';
-        }).join('');
+        contenedor.innerHTML = GRUPOS_REPORTES.map(function (grupo) {
+          return '<h3 class="reporte-grupo">' + grupo.titulo + '</h3>' +
+            '<div class="tarjetas">' + grupo.tarjetas.map(function (item) {
+              return renderTarjetaReporte(item, respuesta.reportes);
+            }).join('') + '</div>';
+        }).join('') + renderReportePorCarrera(respuesta.reportes);
       } catch (error) {
         estadoPagina.cargado.reportes = false;
         contenedor.innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
         mostrarAviso(error.message, 'error');
+      }
+    }
+
+    function renderTarjetaReporte(item, reportes) {
+      const dato = reportes[item.clave];
+      // null indica que Google no informo la cuota; se muestra un guion en vez de 0.
+      const valor = dato === null ? '—' : (dato === undefined ? 0 : dato);
+      const total = reportes.totalAlumnos || 0;
+      const porcentaje = item.clave.indexOf('alumnos') === 0 || item.clave === 'expedientesCompletos'
+        ? (total ? ' <span class="tarjeta-porcentaje">' + Math.round((valor / total) * 100) + '%</span>' : '')
+        : '';
+      return '<article class="tarjeta ' + item.clase + '">' +
+        '<div class="tarjeta-icono">' + icono(item.icono) + '</div>' +
+        '<p class="tarjeta-valor">' + escapeHtml(valor) + porcentaje + '</p>' +
+        '<p class="tarjeta-etiqueta">' + item.etiqueta + '</p>' +
+        '</article>';
+    }
+
+    function renderReportePorCarrera(reportes) {
+      const filas = reportes.porCarrera || [];
+      if (!filas.length) {
+        return '';
+      }
+      return '<h3 class="reporte-grupo">Avance por carrera</h3>' +
+        '<div class="tabla-contenedor"><table><thead><tr><th>Carrera</th>' +
+        COLUMNAS_REPORTE_CARRERA.map(function (columna) { return '<th>' + columna.etiqueta + '</th>'; }).join('') +
+        '<th>Avance</th></tr></thead><tbody>' +
+        filas.map(function (fila) {
+          const avance = fila.totalAlumnos ? Math.round((fila.expedientesCompletos / fila.totalAlumnos) * 100) : 0;
+          return '<tr><td><strong>' + escapeHtml(fila.carrera) + '</strong></td>' +
+            COLUMNAS_REPORTE_CARRERA.map(function (columna) { return '<td>' + escapeHtml(fila[columna.clave]) + '</td>'; }).join('') +
+            '<td><div class="barra-avance" title="' + avance + '% completos"><span style="width:' + avance + '%"></span></div>' +
+            '<span class="texto-secundario">' + avance + '%</span></td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
+    /* ---------------- Prueba de carga ---------------- */
+
+    const BYTES_POR_KB = 1024;
+
+    function actualizarAyudaPrueba() {
+      const cantidad = Number(document.getElementById('prueba-cantidad').value);
+      const kilobytes = Number(document.getElementById('prueba-tamano').value);
+      const totalMb = (cantidad * kilobytes / BYTES_POR_KB).toFixed(1);
+      document.getElementById('ayuda-prueba').textContent =
+        'Se subirán en total ' + totalMb + ' MB desde tu conexión. Con una conexión lenta, la prueba medirá tu internet más que el sistema.';
+    }
+
+    /**
+     * PDF valido minimo relleno hasta el tamano pedido: pasa la misma
+     * validacion de formato que un archivo real.
+     */
+    function crearPdfDePrueba(kilobytes) {
+      const inicio = '%PDF-1.4\n%';
+      const fin = '\n%%EOF\n';
+      const relleno = 'A'.repeat(Math.max(0, kilobytes * BYTES_POR_KB - inicio.length - fin.length));
+      return btoa(inicio + relleno + fin);
+    }
+
+    function mostrarResultadoPrueba(html) {
+      const contenedor = document.getElementById('resultado-prueba');
+      contenedor.innerHTML = html;
+      contenedor.hidden = false;
+    }
+
+    async function ejecutarPruebaCarga(evento) {
+      evento.preventDefault();
+      const boton = document.getElementById('boton-ejecutar-prueba');
+      const cantidad = Number(document.getElementById('prueba-cantidad').value);
+      const kilobytes = Number(document.getElementById('prueba-tamano').value);
+      marcarCargando(boton, true);
+      try {
+        mostrarResultadoPrueba('<p class="cargando">Preparando ' + cantidad + ' alumnos de prueba y sus carpetas...</p>');
+        const preparacion = await api('apiPrepararPruebaCarga', { cantidad: cantidad });
+        const contenido = crearPdfDePrueba(kilobytes);
+        const tiempos = [];
+        const errores = [];
+        let terminadas = 0;
+        mostrarResultadoPrueba('<p><strong>Subiendo ' + cantidad + ' archivos a la vez...</strong> <span id="contador-prueba">0 de ' + cantidad + '</span></p>' +
+          '<div class="progreso-prueba"><span id="barra-prueba"></span></div>');
+        const inicio = Date.now();
+
+        await Promise.all(preparacion.matriculas.map(function (matricula) {
+          const inicioCarga = Date.now();
+          return api('apiEjecutarCargaPrueba', { matricula: matricula, nombreArchivo: matricula + '.pdf', contenidoBase64: contenido })
+            .then(function () { tiempos.push(Date.now() - inicioCarga); })
+            .catch(function (error) { errores.push(matricula + ': ' + error.message); })
+            .finally(function () {
+              terminadas++;
+              document.getElementById('contador-prueba').textContent = terminadas + ' de ' + cantidad;
+              document.getElementById('barra-prueba').style.width = Math.round((terminadas / cantidad) * 100) + '%';
+            });
+        }));
+
+        const totalSegundos = (Date.now() - inicio) / 1000;
+        const verificacion = (await api('apiVerificarPruebaCarga')).verificacion;
+        mostrarResultadoPrueba(renderResultadoPrueba(cantidad, kilobytes, totalSegundos, tiempos, errores, verificacion));
+        estadoPagina.cargado.historial = false;
+      } catch (error) {
+        mostrarResultadoPrueba('<div class="resultado-error">' + escapeHtml(error.message) + '</div>');
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+
+    function renderResultadoPrueba(cantidad, kilobytes, totalSegundos, tiempos, errores, verificacion) {
+      const ordenados = tiempos.slice().sort(function (a, b) { return a - b; });
+      const segundos = function (ms) { return (ms / 1000).toFixed(1) + ' s'; };
+      const promedio = ordenados.length ? ordenados.reduce(function (a, b) { return a + b; }, 0) / ordenados.length : 0;
+      const revisar = function (correcto, texto) {
+        return '<li class="' + (correcto ? 'verificacion-ok' : 'verificacion-error') + '">' +
+          icono(correcto ? 'check' : 'alerta') + '<span>' + texto + '</span></li>';
+      };
+      const lista = function (valores) {
+        return valores.length ? ': ' + escapeHtml(valores.slice(0, 10).join(', ')) + (valores.length > 10 ? '…' : '') : '';
+      };
+      return '<h3>' + (verificacion.correcto && !errores.length
+          ? '✅ Prueba superada: sin pérdida ni duplicados'
+          : '⚠️ La prueba encontró problemas') + '</h3>' +
+        '<div class="tarjetas">' +
+          '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + (cantidad - errores.length) + ' / ' + cantidad + '</p><p class="tarjeta-etiqueta">Cargas exitosas</p></article>' +
+          '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + totalSegundos.toFixed(1) + ' s</p><p class="tarjeta-etiqueta">Tiempo total</p></article>' +
+          '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + segundos(promedio) + '</p><p class="tarjeta-etiqueta">Promedio por carga</p></article>' +
+          '<article class="tarjeta tarjeta-neutro"><p class="tarjeta-valor">' + segundos(ordenados[ordenados.length - 1] || 0) + '</p><p class="tarjeta-etiqueta">Carga más lenta</p></article>' +
+        '</div>' +
+        '<ul class="lista-verificacion">' +
+          revisar(!errores.length, errores.length ? errores.length + ' cargas fallaron' + lista(errores) : 'Ninguna carga falló (' + cantidad + ' PDF de ' + kilobytes + ' KB)') +
+          revisar(!verificacion.alumnosSinDocumento.length, 'Alumnos sin documento registrado: ' + verificacion.alumnosSinDocumento.length + lista(verificacion.alumnosSinDocumento)) +
+          revisar(!verificacion.documentosDuplicados.length, 'Documentos duplicados: ' + verificacion.documentosDuplicados.length + lista(verificacion.documentosDuplicados)) +
+          revisar(!verificacion.documentosSinArchivo, 'Documentos sin archivo en Drive: ' + verificacion.documentosSinArchivo) +
+          revisar(!verificacion.alumnosSinHistorial.length, 'Alumnos sin registro en el historial: ' + verificacion.alumnosSinHistorial.length + lista(verificacion.alumnosSinHistorial)) +
+          revisar(!verificacion.estatusGeneralIncorrecto.length, 'Estatus general sin actualizar: ' + verificacion.estatusGeneralIncorrecto.length + lista(verificacion.estatusGeneralIncorrecto)) +
+        '</ul>' +
+        '<p class="ayuda">Recuerda presionar <strong>Limpiar datos de prueba</strong> antes de otra prueba o del piloto.</p>';
+    }
+
+    async function limpiarPruebaCarga() {
+      if (!confirm('Se borrarán los alumnos y documentos de prueba y su carpeta irá a la papelera de Drive. ¿Continuar?')) {
+        return;
+      }
+      const boton = document.getElementById('boton-limpiar-prueba');
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiLimpiarPruebaCarga');
+        mostrarResultadoPrueba('<div class="resultado-ok">Se eliminaron ' + respuesta.alumnos + ' alumnos y ' +
+          respuesta.documentos + ' documentos de prueba' +
+          (respuesta.carpetaEnPapelera ? '; la carpeta "Prueba de carga" está en la papelera de Drive.' : '.') + '</div>');
+        estadoPagina.cargado.reportes = false;
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
       }
     }
 
