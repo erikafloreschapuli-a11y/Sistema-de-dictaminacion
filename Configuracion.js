@@ -182,6 +182,14 @@ const FUNCION_CONTINUAR_CARPETAS = 'continuarCreacionCarpetas';
 const PREFIJO_CACHE_CARPETA = 'carpeta_';
 const DURACION_CACHE_CARPETA_SEGUNDOS = 6 * 60 * 60;
 
+// Prueba de carga (criterio "200 cargas simultaneas"). Sus alumnos se
+// distinguen por el prefijo de matricula, no aparecen en reportes ni para
+// dictaminar y se guardan en una carpeta aparte de Drive.
+const PREFIJO_MATRICULA_PRUEBA = 'PRUEBA-';
+const NOMBRE_GRUPO_PRUEBA = 'Prueba de carga';
+const MAXIMO_ALUMNOS_PRUEBA = 200;
+const DIGITOS_MATRICULA_PRUEBA = 4;
+
 // Conversion de unidades para validar el tamano maximo (RF-10).
 const BYTES_POR_MEGABYTE = 1024 * 1024;
 

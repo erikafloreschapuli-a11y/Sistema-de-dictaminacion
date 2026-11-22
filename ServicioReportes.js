@@ -1,70 +1,89 @@
 /**
  * ServicioReportes.js
  * Estadisticas generales del panel del Administrador (RF-23).
- * Cuenta sobre la version mas reciente de cada documento por estudiante.
+ * Se calculan por expediente: cada alumno tiene sus tres documentos, aunque
+ * todavia no haya subido alguno (cuenta como Pendiente). Los alumnos de la
+ * prueba de carga no se cuentan.
  */
 
 /**
- * Devuelve los 6 indicadores del panel: total de alumnos, pendientes,
- * en revision, aprobados, observados y expedientes completos (RF-23).
+ * Indicadores por alumno, por documento y por carrera (RF-23).
  */
 function apiObtenerReportesGenerales() {
   return protegerApi(function () {
     asegurarRol([ROLES.ADMINISTRADOR]);
-    const estudiantes = leerHoja(HOJAS.ESTUDIANTES);
-    const documentos = leerHoja(HOJAS.DOCUMENTOS);
-    const reportes = construirReportesGenerales(estudiantes, documentos);
+    const reportes = construirReportesGenerales(leerHoja(HOJAS.ESTUDIANTES), leerHoja(HOJAS.DOCUMENTOS));
     // Se muestra para que el Administrador anticipe dias de mucho dictamen (RNF-10).
     reportes.cuotaCorreosRestante = obtenerCuotaCorreosRestante();
     return { ok: true, reportes: reportes };
   });
 }
 
-/**
- * Calcula los indicadores a partir de estudiantes y documentos.
- * Separado de la API para poder probarlo sin sesion.
- */
-function construirReportesGenerales(estudiantes, documentos) {
-  const ultimasVersiones = obtenerUltimaVersionPorTipo(documentos);
-  const reportes = {
-    totalAlumnos: estudiantes.length,
+function crearContadoresReporte() {
+  return {
+    totalAlumnos: 0,
+    alumnosSinDocumentos: 0,
+    alumnosConFaltantes: 0,
+    alumnosPorRevisar: 0,
+    alumnosConObservaciones: 0,
+    expedientesCompletos: 0,
     pendientes: 0,
     enRevision: 0,
     aprobados: 0,
-    observados: 0,
-    expedientesCompletos: 0
+    observados: 0
   };
+}
 
-  const estatusPorEstudiante = {};
-  Object.keys(ultimasVersiones).forEach(function (clave) {
-    const documento = ultimasVersiones[clave];
-    const estatus = String(documento.estatus);
-    if (estatus === ESTATUS_DOCUMENTO.PENDIENTE) {
-      reportes.pendientes++;
-    } else if (estatus === ESTATUS_DOCUMENTO.EN_REVISION) {
-      reportes.enRevision++;
-    } else if (estatus === ESTATUS_DOCUMENTO.APROBADO) {
-      reportes.aprobados++;
-    } else if (estatus === ESTATUS_DOCUMENTO.OBSERVADO) {
-      reportes.observados++;
-    }
-    const matricula = String(documento.matricula);
-    if (!estatusPorEstudiante[matricula]) {
-      estatusPorEstudiante[matricula] = {};
-    }
-    estatusPorEstudiante[matricula][String(documento.tipo_documento)] = estatus;
+/**
+ * Suma un expediente a los contadores. Un alumno puede estar a la vez
+ * "por revisar" y "con observaciones" si tiene documentos en ambos estatus.
+ */
+function sumarExpedienteAReporte(contadores, expediente) {
+  const conteos = expediente.conteos;
+  contadores.totalAlumnos++;
+  contadores.pendientes += conteos.pendientes;
+  contadores.enRevision += conteos.enRevision;
+  contadores.aprobados += conteos.aprobados;
+  contadores.observados += conteos.observados;
+  if (conteos.pendientes === expediente.totalDocumentos) {
+    contadores.alumnosSinDocumentos++;
+  } else if (conteos.pendientes > 0) {
+    contadores.alumnosConFaltantes++;
+  }
+  if (conteos.enRevision > 0) {
+    contadores.alumnosPorRevisar++;
+  }
+  if (conteos.observados > 0) {
+    contadores.alumnosConObservaciones++;
+  }
+  if (expediente.estatus === ESTATUS_EXPEDIENTE.COMPLETO) {
+    contadores.expedientesCompletos++;
+  }
+}
+
+/**
+ * Calcula los indicadores generales y el desglose por carrera.
+ * Separado de la API para poder probarlo sin sesion.
+ */
+function construirReportesGenerales(estudiantes, documentos) {
+  const alumnosReales = estudiantes.filter(function (estudiante) {
+    return !esMatriculaDePrueba(estudiante.matricula);
+  });
+  const reportes = crearContadoresReporte();
+  const porCarrera = {};
+
+  construirExpedientes(alumnosReales, documentos).forEach(function (expediente) {
+    sumarExpedienteAReporte(reportes, expediente);
+    const carrera = expediente.carrera || CARPETA_SIN_CARRERA;
+    porCarrera[carrera] = porCarrera[carrera] || crearContadoresReporte();
+    sumarExpedienteAReporte(porCarrera[carrera], expediente);
   });
 
-  estudiantes.forEach(function (estudiante) {
-    const estatusDeTipos = estatusPorEstudiante[String(estudiante.matricula)] || {};
-    const completo = TIPOS_DOCUMENTO.every(function (tipo) {
-      return estatusDeTipos[tipo] === ESTATUS_DOCUMENTO.APROBADO;
-    });
-    if (completo) {
-      reportes.expedientesCompletos++;
-    }
+  reportes.porCarrera = Object.keys(porCarrera).sort(function (a, b) {
+    return a.localeCompare(b);
+  }).map(function (carrera) {
+    return Object.assign({ carrera: carrera }, porCarrera[carrera]);
   });
-
   return reportes;
 }
 

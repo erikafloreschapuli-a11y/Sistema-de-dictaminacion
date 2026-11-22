@@ -17,7 +17,10 @@
 function apiObtenerExpedientesDictaminador(datos) {
   return protegerApi(function () {
     asegurarRol([ROLES.DICTAMINADOR]);
-    const estudiantes = leerHoja(HOJAS.ESTUDIANTES);
+    // Los alumnos de la prueba de carga no deben aparecer para dictaminar.
+    const estudiantes = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
+      return !esMatriculaDePrueba(estudiante.matricula);
+    });
     const documentos = leerHoja(HOJAS.DOCUMENTOS);
     const filtros = datos || {};
     const expedientes = construirExpedientes(estudiantes, documentos)
