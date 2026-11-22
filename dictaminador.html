@@ -4,96 +4,103 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dictaminacion de expedientes - UTP 2026</title>
+  <title>Dictaminación de expedientes - UTP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <style>
     <?!= include('estilos') ?>
     <?!= include('Dictaminador/dictaminadorStyle') ?>
   </style>
 </head>
-<body>
+<body data-url-app="<?= cabecera.urlApp ?>">
   <header class="cabecera">
     <div class="cabecera-contenido">
-      <div>
-        <p class="cabecera-institucion">Universidad Tecnologica de Puebla</p>
-        <h1>Dictaminacion de expedientes - Nuevo ingreso 2026</h1>
+      <div class="marca">
+        <div class="marca-logo">UTP</div>
+        <div>
+          <p class="cabecera-institucion">Universidad Tecnológica de Puebla</p>
+          <h1>Dictaminación de expedientes</h1>
+        </div>
       </div>
       <div class="cabecera-usuario">
-        <span class="cabecera-nombre"><?= usuario.nombre ?></span>
-        <span class="etiqueta-rol"><?= usuario.rol ?></span>
+        <div class="avatar"><?= cabecera.iniciales ?></div>
+        <div class="cabecera-persona">
+          <span class="cabecera-nombre"><?= usuario.nombre ?></span>
+          <span class="etiqueta-rol"><?= usuario.rol ?></span>
+        </div>
+        <a class="boton-salir" href="<?= cabecera.urlSalir ?>" target="_top"><i data-icono="salir"></i><span>Cerrar sesión</span></a>
       </div>
     </div>
   </header>
 
   <nav class="menu" aria-label="Secciones del panel">
-    <button type="button" class="menu-boton activo" data-seccion="expedientes">Expedientes</button>
+    <button type="button" class="menu-boton activo" data-seccion="expedientes"><i data-icono="revisar"></i>Expedientes</button>
+    <button type="button" class="menu-boton" data-seccion="actividad"><i data-icono="historial"></i>Mi actividad</button>
     <? if (usuario.rol === 'Administrador') { ?>
-      <a class="menu-boton menu-enlace" href="?panel=administrador" target="_top">Volver a administracion</a>
+      <span class="menu-separador"></span>
+      <a class="menu-boton" href="<?= cabecera.urlApp ?>?panel=administrador" target="_top"><i data-icono="grafica"></i>Volver a administración</a>
     <? } ?>
   </nav>
 
   <main class="contenedor">
     <!-- RF-15 a RF-21: revision y dictamen de documentos -->
     <section id="seccion-expedientes" class="seccion">
-      <h2 class="seccion-titulo">Expedientes para dictamen <span class="rf">RF-15 a RF-21</span></h2>
-
-      <form id="form-filtros" class="panel filtros">
-        <label class="campo">Buscar matricula o nombre
-          <input type="search" id="filtro-texto" maxlength="120" placeholder="Ej. 2026-0001 o nombre">
-        </label>
-        <label class="campo">Carrera
-          <select id="filtro-carrera">
-            <option value="">Todas las carreras</option>
-          </select>
-        </label>
-        <label class="campo">Estatus
-          <select id="filtro-estatus">
-            <option value="En Revision" selected>En revision</option>
-            <option value="">Todos</option>
-            <option value="Pendiente">Pendiente</option>
-            <option value="Observado">Observado</option>
-            <option value="Completo">Completo</option>
-          </select>
-        </label>
-        <div class="formulario-acciones">
-          <button type="submit" class="boton" id="boton-buscar">Buscar</button>
-          <button type="button" class="boton boton-secundario" id="boton-limpiar-filtros">Limpiar</button>
-        </div>
-      </form>
-
       <div class="dictamen-layout">
         <div class="dictamen-lista">
+          <form id="form-filtros" class="panel filtros-compactos">
+            <label class="campo">Buscar por matrícula o nombre
+              <input type="search" id="filtro-texto" maxlength="120" placeholder="Ej. 20260001 o Ana López">
+            </label>
+            <div class="fila-filtros">
+              <label class="campo">Carrera
+                <select id="filtro-carrera">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+              <label class="campo">Estatus
+                <select id="filtro-estatus">
+                  <option value="En Revision" selected>En revisión</option>
+                  <option value="">Todos</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Observado">Observado</option>
+                  <option value="Completo">Completo</option>
+                </select>
+              </label>
+            </div>
+            <div class="formulario-acciones">
+              <button type="button" class="boton boton-mini boton-secundario" id="boton-limpiar-filtros">Limpiar</button>
+              <button type="submit" class="boton boton-mini" id="boton-buscar"><i data-icono="lupa"></i>Buscar</button>
+            </div>
+          </form>
+
           <p class="total-expedientes" id="total-expedientes"></p>
-          <div class="tabla-contenedor">
-            <table>
-              <thead>
-                <tr>
-                  <th>Estudiante</th>
-                  <th>Carrera</th>
-                  <th>Estatus</th>
-                  <th>Documentos</th>
-                  <th>Accion</th>
-                </tr>
-              </thead>
-              <tbody id="cuerpo-expedientes">
-                <tr><td colspan="5" class="cargando">Cargando expedientes...</td></tr>
-              </tbody>
-            </table>
+          <div class="lista-expedientes" id="cuerpo-expedientes">
+            <p class="cargando">Cargando expedientes...</p>
           </div>
         </div>
 
         <!-- RF-17: documento visible a un lado y acciones al otro -->
-        <aside class="dictamen-detalle panel" id="detalle-expediente">
-          <p class="vacio">Selecciona un expediente para revisar sus documentos.</p>
-        </aside>
+        <section class="dictamen-detalle panel" id="detalle-expediente" aria-live="polite"></section>
       </div>
     </section>
-  </main> 
+
+    <!-- Historial propio: cambios que hizo este usuario -->
+    <section id="seccion-actividad" class="seccion" hidden>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Mi actividad</h2>
+        <p class="seccion-descripcion">Tus últimos dictámenes y cambios registrados en el historial.</p>
+      </div>
+      <div class="panel" id="contenedor-actividad">
+        <p class="cargando">Cargando actividad...</p>
+      </div>
+    </section>
+  </main>
 
   <div id="aviso-global" class="aviso" hidden></div>
 
-  
-    <?!= include('scripts') ?>
-  
+  <?!= include('scripts') ?>
+  <?!= include('visor') ?>
+
   <script>
     // Estado del panel: lista filtrada y expediente abierto.
     const estadoPagina = {
@@ -102,31 +109,105 @@
       expedienteActual: null,
       matriculaActual: '',
       documentoSeleccionado: '',
+      // 'documento' muestra visor y dictamen; 'historial' la linea de tiempo del alumno.
+      vistaDetalle: 'documento',
+      historialPorMatricula: {},
+      actividadCargada: false,
       cargando: false
-    };
-
-    const CLASE_ESTATUS = {
-      'Pendiente': 'estado-pendiente',
-      'En Revision': 'estado-revision',
-      'Aprobado': 'estado-aprobado',
-      'Observado': 'estado-observado',
-      'Completo': 'estado-aprobado'
     };
 
     const ESTATUS_OBSERVADO = 'Observado';
     const ESTATUS_APROBADO = 'Aprobado';
+    const ANCHO_PANTALLA_APILADA = 900;
+
+    const CLASE_PUNTO = {
+      'En Revision': 'punto-revision',
+      'Aprobado': 'punto-aprobado',
+      'Observado': 'punto-observado'
+    };
 
     document.addEventListener('DOMContentLoaded', function () {
       document.getElementById('form-filtros').addEventListener('submit', function (evento) {
         evento.preventDefault();
         cargarExpedientes();
       });
+      document.getElementById('filtro-carrera').addEventListener('change', function () { cargarExpedientes(); });
+      document.getElementById('filtro-estatus').addEventListener('change', function () { cargarExpedientes(); });
       document.getElementById('boton-limpiar-filtros').addEventListener('click', limpiarFiltros);
-      document.getElementById('cuerpo-expedientes').addEventListener('click', manejarTabla);
+      document.getElementById('cuerpo-expedientes').addEventListener('click', manejarLista);
       document.getElementById('detalle-expediente').addEventListener('click', manejarDetalle);
+      document.querySelectorAll('.menu-boton[data-seccion]').forEach(function (boton) {
+        boton.addEventListener('click', function () {
+          cambiarSeccion(boton.dataset.seccion);
+        });
+      });
 
+      renderDetalle();
       cargarExpedientes();
     });
+
+    function cambiarSeccion(nombre) {
+      document.querySelectorAll('.menu-boton[data-seccion]').forEach(function (boton) {
+        boton.classList.toggle('activo', boton.dataset.seccion === nombre);
+      });
+      document.querySelectorAll('.seccion').forEach(function (seccion) {
+        seccion.hidden = seccion.id !== 'seccion-' + nombre;
+      });
+      if (nombre === 'actividad' && !estadoPagina.actividadCargada) {
+        cargarActividad();
+      }
+    }
+
+    /* ---------------- Historial propio del dictaminador ---------------- */
+
+    async function cargarActividad() {
+      const contenedor = document.getElementById('contenedor-actividad');
+      estadoPagina.actividadCargada = true;
+      contenedor.innerHTML = '<p class="cargando">Cargando actividad...</p>';
+      try {
+        const respuesta = await api('apiObtenerMiActividad');
+        contenedor.innerHTML = renderLineaTiempo(respuesta.registros, {
+          mostrarEstudiante: true,
+          vacio: 'Todavía no has dictaminado documentos.'
+        });
+      } catch (error) {
+        estadoPagina.actividadCargada = false;
+        contenedor.innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+      }
+    }
+
+    /* ---------------- Historial del alumno ---------------- */
+
+    async function cargarHistorialEstudiante(matricula) {
+      const contenedor = document.getElementById('contenedor-historial-estudiante');
+      if (!contenedor) {
+        return;
+      }
+      const guardado = estadoPagina.historialPorMatricula[matricula];
+      if (guardado) {
+        contenedor.innerHTML = renderLineaTiempo(guardado, { mostrarUsuario: true });
+        return;
+      }
+      contenedor.innerHTML = '<p class="cargando">Cargando historial...</p>';
+      try {
+        const respuesta = await api('apiObtenerHistorialEstudiante', { matricula: matricula });
+        estadoPagina.historialPorMatricula[matricula] = respuesta.registros;
+        if (estadoPagina.matriculaActual === matricula && estadoPagina.vistaDetalle === 'historial') {
+          contenedor.innerHTML = renderLineaTiempo(respuesta.registros, { mostrarUsuario: true });
+        }
+      } catch (error) {
+        contenedor.innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+      }
+    }
+
+    function obtenerIniciales(texto) {
+      const palabras = String(texto || '').split(/\s+/).filter(Boolean);
+      return palabras.slice(0, 2).map(function (palabra) { return palabra.charAt(0).toUpperCase(); }).join('') || '?';
+    }
+
+    function crearPunto(estatus) {
+      return '<span class="punto ' + (CLASE_PUNTO[estatus] || '') + '" title="' + escapeHtml(ETIQUETAS_ESTATUS[estatus] || estatus) + '"></span>';
+    }
 
     /* ---------------- RF-15 y RF-16: lista y filtros ---------------- */
 
@@ -150,18 +231,18 @@
         return;
       }
       estadoPagina.cargando = true;
-      const cuerpo = document.getElementById('cuerpo-expedientes');
+      const lista = document.getElementById('cuerpo-expedientes');
       if (mostrarCargando !== false) {
-        cuerpo.innerHTML = '<tr><td colspan="5" class="cargando">Cargando expedientes...</td></tr>';
+        lista.innerHTML = '<p class="cargando">Cargando expedientes...</p>';
       }
       try {
         const respuesta = await api('apiObtenerExpedientesDictaminador', obtenerFiltros());
         estadoPagina.expedientes = respuesta.expedientes || [];
         estadoPagina.carreras = respuesta.carreras || [];
         renderCarreras();
-        renderTabla();
+        renderLista();
       } catch (error) {
-        cuerpo.innerHTML = '<tr><td colspan="5" class="resultado-error">' + escapeHtml(error.message) + '</td></tr>';
+        lista.innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
         mostrarAviso(error.message, 'error');
       } finally {
         estadoPagina.cargando = false;
@@ -171,7 +252,7 @@
     function renderCarreras() {
       const select = document.getElementById('filtro-carrera');
       const seleccionada = select.value;
-      const opciones = ['<option value="">Todas las carreras</option>'];
+      const opciones = ['<option value="">Todas</option>'];
       estadoPagina.carreras.forEach(function (carrera) {
         opciones.push('<option value="' + escapeHtml(carrera) + '">' + escapeHtml(carrera) + '</option>');
       });
@@ -179,36 +260,37 @@
       select.value = estadoPagina.carreras.indexOf(seleccionada) === -1 ? '' : seleccionada;
     }
 
-    function renderTabla() {
-      const cuerpo = document.getElementById('cuerpo-expedientes');
+    function renderLista() {
+      const lista = document.getElementById('cuerpo-expedientes');
       const expedientes = estadoPagina.expedientes || [];
       document.getElementById('total-expedientes').textContent = expedientes.length
-        ? 'Mostrando ' + expedientes.length + ' expediente(s).'
+        ? expedientes.length + ' expediente(s) encontrados'
         : '';
       if (!expedientes.length) {
-        cuerpo.innerHTML = '<tr><td colspan="5" class="vacio">No hay expedientes con los filtros seleccionados.</td></tr>';
+        lista.innerHTML = '<p class="vacio">No hay expedientes con los filtros seleccionados.</p>';
         return;
       }
-      cuerpo.innerHTML = expedientes.map(function (expediente) {
-        const clase = CLASE_ESTATUS[expediente.estatus] || 'estado-pendiente';
-        const activa = expediente.matricula === estadoPagina.matriculaActual ? ' class="fila-activa"' : '';
-        return '<tr' + activa + '>' +
-          '<td><strong>' + escapeHtml(expediente.nombre || 'Sin nombre') + '</strong><br>' +
-            '<span class="documento-meta">' + escapeHtml(expediente.matricula) + '</span></td>' +
-          '<td>' + escapeHtml(expediente.carrera || 'Sin carrera') + '</td>' +
-          '<td><span class="estado ' + clase + '">' + escapeHtml(expediente.estatus) + '</span></td>' +
-          '<td>' + expediente.conteos.aprobados + ' de ' + expediente.totalDocumentos + '<br>' +
-            '<span class="documento-meta">' + expediente.conteos.enRevision + ' en revision</span></td>' +
-          '<td><button type="button" class="boton boton-mini boton-secundario" data-accion="abrir" ' +
-            'data-matricula="' + escapeHtml(expediente.matricula) + '">Abrir</button></td>' +
-          '</tr>';
+      lista.innerHTML = expedientes.map(function (expediente) {
+        const activo = expediente.matricula === estadoPagina.matriculaActual ? ' activo' : '';
+        const puntos = (expediente.documentos || []).map(function (documento) {
+          return crearPunto(documento.estatus);
+        }).join('');
+        return '<button type="button" class="expediente-item' + activo + '" data-matricula="' + escapeHtml(expediente.matricula) + '">' +
+          '<span class="avatar">' + escapeHtml(obtenerIniciales(expediente.nombre)) + '</span>' +
+          '<span>' +
+            '<span class="expediente-nombre">' + escapeHtml(expediente.nombre || 'Sin nombre') + '</span>' +
+            '<span class="expediente-meta">' + escapeHtml(expediente.matricula) + ' · ' + escapeHtml(expediente.carrera || 'Sin carrera') + '</span>' +
+          '</span>' +
+          '<span class="expediente-lado">' + crearEtiquetaEstatus(expediente.estatus) +
+            '<span class="puntos">' + puntos + '</span></span>' +
+          '</button>';
       }).join('');
     }
 
-    function manejarTabla(evento) {
-      const boton = evento.target.closest('button[data-accion="abrir"]');
-      if (boton) {
-        abrirExpediente(boton.dataset.matricula);
+    function manejarLista(evento) {
+      const elemento = evento.target.closest('.expediente-item');
+      if (elemento) {
+        abrirExpediente(elemento.dataset.matricula);
       }
     }
 
@@ -220,7 +302,13 @@
       }
       estadoPagina.matriculaActual = matricula;
       estadoPagina.documentoSeleccionado = '';
-      document.getElementById('detalle-expediente').innerHTML = '<p class="cargando">Cargando expediente...</p>';
+      estadoPagina.vistaDetalle = 'documento';
+      renderLista();
+      const detalle = document.getElementById('detalle-expediente');
+      detalle.innerHTML = '<p class="cargando">Cargando expediente...</p>';
+      if (window.innerWidth <= ANCHO_PANTALLA_APILADA) {
+        detalle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       try {
         const respuesta = await api('apiObtenerExpedienteDictaminador', { matricula: matricula });
         estadoPagina.expedienteActual = respuesta.expediente;
@@ -230,11 +318,9 @@
         }) || documentos[0];
         estadoPagina.documentoSeleccionado = seleccionado ? seleccionado.tipo_documento : '';
         renderDetalle();
-        renderTabla();
       } catch (error) {
         estadoPagina.expedienteActual = null;
-        document.getElementById('detalle-expediente').innerHTML =
-          '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+        detalle.innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
         mostrarAviso(error.message, 'error');
       }
     }
@@ -243,36 +329,54 @@
       const contenedor = document.getElementById('detalle-expediente');
       const expediente = estadoPagina.expedienteActual;
       if (!expediente) {
-        contenedor.innerHTML = '<p class="vacio">Selecciona un expediente para revisar sus documentos.</p>';
+        contenedor.innerHTML = '<div class="dictamen-vacio"><div>' + icono('revisar') +
+          '<p><strong>Selecciona un expediente</strong><br>Sus documentos aparecerán aquí para revisarlos.</p></div></div>';
         return;
       }
 
       const documento = obtenerDocumentoSeleccionado(expediente);
-      const clase = CLASE_ESTATUS[expediente.estatus] || 'estado-pendiente';
       const tabs = (expediente.documentos || []).map(function (item) {
-        const claseItem = CLASE_ESTATUS[item.estatus] || 'estado-pendiente';
-        const activo = item.tipo_documento === estadoPagina.documentoSeleccionado ? ' activo' : '';
+        const activo = estadoPagina.vistaDetalle === 'documento' && item.tipo_documento === estadoPagina.documentoSeleccionado ? ' activo' : '';
         return '<button type="button" class="dictamen-tab' + activo + '" data-accion="seleccionar-documento" ' +
-          'data-tipo="' + escapeHtml(item.tipo_documento) + '">' +
-          escapeHtml(item.tipo_documento) +
-          ' <span class="estado ' + claseItem + '">' + escapeHtml(item.estatus) + '</span></button>';
-      }).join('');
+          'data-tipo="' + escapeHtml(item.tipo_documento) + '">' + crearPunto(item.estatus) +
+          escapeHtml(item.tipo_documento) + '</button>';
+      }).join('') +
+        '<button type="button" class="dictamen-tab' + (estadoPagina.vistaDetalle === 'historial' ? ' activo' : '') +
+        '" data-accion="ver-historial">' + icono('historial') + 'Historial</button>';
 
       contenedor.innerHTML =
         '<div class="dictamen-cabecera">' +
           '<div>' +
             '<h3>' + escapeHtml(expediente.nombre || 'Estudiante') + '</h3>' +
-            '<p class="dictamen-meta">' + escapeHtml(expediente.matricula) + ' | ' +
-              escapeHtml(expediente.carrera || 'Sin carrera') + ' | ' +
-              escapeHtml(expediente.generacion || 'Sin generacion') + '</p>' +
+            '<p class="dictamen-meta">' + escapeHtml(expediente.matricula) + ' · ' +
+              escapeHtml(expediente.carrera || 'Sin carrera') + ' · Generación ' +
+              escapeHtml(expediente.generacion || 'sin definir') + '</p>' +
           '</div>' +
-          '<span class="estado ' + clase + '">' + escapeHtml(expediente.estatus) + '</span>' +
+          crearEtiquetaEstatus(expediente.estatus) +
         '</div>' +
         '<div class="dictamen-tabs">' + tabs + '</div>' +
-        '<div class="dictamen-cuadro">' +
-          renderVisorDocumento(documento) +
-          renderAccionesDictamen(documento) +
-        '</div>';
+        (estadoPagina.vistaDetalle === 'historial'
+          ? '<div id="contenedor-historial-estudiante" class="historial-estudiante"></div>'
+          : '<div class="dictamen-cuadro">' +
+              '<div id="contenedor-visor-dictamen"></div>' +
+              renderAccionesDictamen(documento) +
+            '</div>');
+
+      if (estadoPagina.vistaDetalle === 'historial') {
+        cargarHistorialEstudiante(expediente.matricula);
+        return;
+      }
+
+      const visor = document.getElementById('contenedor-visor-dictamen');
+      if (documento && documento.tieneArchivo) {
+        mostrarVisor(visor, {
+          matricula: expediente.matricula,
+          tipoDocumento: documento.tipo_documento,
+          version: documento.fecha_carga
+        });
+      } else {
+        visor.innerHTML = '<div class="visor"><div class="visor-mensaje">El estudiante aún no ha cargado este documento.</div></div>';
+      }
     }
 
     function obtenerDocumentoSeleccionado(expediente) {
@@ -282,56 +386,42 @@
       }) || null;
     }
 
-    function renderVisorDocumento(documento) {
-      if (!documento || !documento.url_archivo) {
-        return '<div class="visor-documento"><p class="vacio">El estudiante aun no ha cargado este documento.</p></div>';
-      }
-      if (!documento.url_vista_previa) {
-        return '<div class="visor-documento"><p class="vacio">Vista previa no disponible.</p>' +
-          '<p class="vacio"><a href="' + escapeHtml(documento.url_archivo) + '" target="_blank" rel="noopener">Abrir archivo</a></p></div>';
-      }
-      return '<div class="visor-documento"><iframe src="' + escapeHtml(documento.url_vista_previa) + '" ' +
-        'title="Vista previa de ' + escapeHtml(documento.tipo_documento) + '"></iframe></div>';
-    }
-
     function renderAccionesDictamen(documento) {
       if (!documento) {
         return '<div class="acciones-dictamen"><p class="nota-dictamen">Selecciona un documento.</p></div>';
       }
-      const clase = CLASE_ESTATUS[documento.estatus] || 'estado-pendiente';
       let contenido = '<div class="acciones-dictamen">' +
-        '<h4>' + escapeHtml(documento.tipo_documento) + '</h4>' +
-        '<p class="nota-dictamen">Estatus: <span class="estado ' + clase + '">' + escapeHtml(documento.estatus) + '</span></p>';
+        '<h4>' + escapeHtml(documento.tipo_documento) + crearEtiquetaEstatus(documento.estatus) + '</h4>';
 
       if (documento.fecha_carga) {
         contenido += '<p class="documento-meta">Cargado: ' + escapeHtml(formatearFechaHora(documento.fecha_carga)) + '</p>';
-      }
-      if (documento.url_archivo) {
-        contenido += '<p class="documento-meta"><a href="' + escapeHtml(documento.url_archivo) +
-          '" target="_blank" rel="noopener">Abrir en Drive</a></p>';
-      }
-      if (documento.observaciones) {
-        contenido += '<div class="observacion-previa"><strong>Observacion:</strong><br>' +
-          escapeHtml(documento.observaciones) + '</div>';
       }
       if (documento.fecha_dictamen) {
         contenido += '<p class="documento-meta">Dictaminado: ' + escapeHtml(formatearFechaHora(documento.fecha_dictamen)) +
           (documento.dictaminador ? ' por ' + escapeHtml(documento.dictaminador) : '') + '</p>';
       }
+      if (documento.observaciones) {
+        contenido += '<div class="observacion-previa"><strong>Observación anterior:</strong><br>' +
+          escapeHtml(documento.observaciones) + '</div>';
+      }
 
       if (documento.puedeDictaminar) {
         contenido +=
-          '<label class="campo">Observacion (obligatoria al observar)' +
-            '<textarea id="campo-observacion" maxlength="1000" placeholder="Escribe el motivo de la observacion..."></textarea>' +
+          '<label class="campo">Observación <span class="texto-secundario">Obligatoria si vas a observar el documento.</span>' +
+            '<textarea id="campo-observacion" maxlength="1000" placeholder="Ej. La imagen no es legible, vuelve a escanearla."></textarea>' +
           '</label>' +
           '<div class="formulario-acciones">' +
-            '<button type="button" class="boton boton-mini" data-accion="aprobar" ' +
-              'data-tipo="' + escapeHtml(documento.tipo_documento) + '">Aprobar</button>' +
-            '<button type="button" class="boton boton-mini boton-peligro" data-accion="observar" ' +
-              'data-tipo="' + escapeHtml(documento.tipo_documento) + '">Observar / Rechazar</button>' +
+            '<button type="button" class="boton" data-accion="aprobar" ' +
+              'data-tipo="' + escapeHtml(documento.tipo_documento) + '">' + icono('check') + 'Aprobar</button>' +
+            '<button type="button" class="boton boton-peligro-solido" data-accion="observar" ' +
+              'data-tipo="' + escapeHtml(documento.tipo_documento) + '">' + icono('alerta') + 'Observar / rechazar</button>' +
           '</div>';
+      } else if (documento.estatus === ESTATUS_APROBADO) {
+        contenido += '<div class="dictamen-final">' + icono('check') + 'Documento aprobado.</div>';
+      } else if (documento.estatus === ESTATUS_OBSERVADO) {
+        contenido += '<p class="nota-dictamen">Esperando a que el estudiante vuelva a subir el documento.</p>';
       } else {
-        contenido += '<p class="nota-dictamen">Este documento ya fue dictaminado.</p>';
+        contenido += '<p class="nota-dictamen">El documento todavía no está listo para revisión.</p>';
       }
       return contenido + '</div>';
     }
@@ -343,6 +433,12 @@
       }
       if (boton.dataset.accion === 'seleccionar-documento') {
         estadoPagina.documentoSeleccionado = boton.dataset.tipo;
+        estadoPagina.vistaDetalle = 'documento';
+        renderDetalle();
+        return;
+      }
+      if (boton.dataset.accion === 'ver-historial') {
+        estadoPagina.vistaDetalle = 'historial';
         renderDetalle();
         return;
       }
@@ -357,7 +453,7 @@
       const expediente = estadoPagina.expedienteActual;
       const documento = expediente ? obtenerDocumentoSeleccionado(expediente) : null;
       if (!expediente || !documento || !documento.puedeDictaminar) {
-        mostrarAviso('El documento ya no esta disponible para dictamen. Actualiza el expediente.', 'error');
+        mostrarAviso('El documento ya no está disponible para dictamen. Actualiza el expediente.', 'error');
         return;
       }
 
@@ -365,7 +461,7 @@
       const campo = document.getElementById('campo-observacion');
       const observacion = campo ? campo.value.trim() : '';
       if (estatusNuevo === ESTATUS_OBSERVADO && !observacion) {
-        mostrarAviso('La observacion es obligatoria para observar o rechazar el documento.', 'error');
+        mostrarAviso('Escribe la observación para que el estudiante sepa qué corregir.', 'error');
         if (campo) {
           campo.focus();
         }
@@ -383,9 +479,15 @@
           fechaCargaEsperada: documento.fecha_carga
         });
         estadoPagina.expedienteActual = respuesta.expediente;
-        estadoPagina.documentoSeleccionado = documento.tipo_documento;
+        // El dictamen agrego un registro: se vuelve a pedir el historial.
+        delete estadoPagina.historialPorMatricula[expediente.matricula];
+        estadoPagina.actividadCargada = false;
+        const siguiente = (respuesta.expediente.documentos || []).find(function (item) {
+          return item.puedeDictaminar;
+        });
+        estadoPagina.documentoSeleccionado = siguiente ? siguiente.tipo_documento : documento.tipo_documento;
         renderDetalle();
-        mostrarAviso(respuesta.mensaje, 'ok');
+        mostrarAviso(respuesta.mensaje, respuesta.notificado === false && estatusNuevo === ESTATUS_OBSERVADO ? 'error' : 'ok');
         await cargarExpedientes(false);
       } catch (error) {
         mostrarAviso(error.message, 'error');

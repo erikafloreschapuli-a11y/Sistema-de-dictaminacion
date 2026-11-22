@@ -4,6 +4,19 @@
  * y convierte cualquier fallo en una excepcion con mensaje en espanol.
  */
 
+const CODIGO_SESION_TERMINADA = 'SESION';
+const CODIGO_SISTEMA_OCUPADO = 'OCUPADO';
+
+// Reintentos cuando el servidor esta saturado (muchas cargas a la vez).
+// La espera crece y lleva un componente aleatorio para que no todos los
+// navegadores reintenten en el mismo instante.
+const MAXIMO_REINTENTOS = 4;
+const ESPERA_BASE_REINTENTO_MS = 1500;
+
+// Fallos de Google por exceso de ejecuciones simultaneas; ocurren antes de
+// ejecutar la funcion, por eso reintentar no duplica escrituras.
+const PATRON_SATURACION_GOOGLE = /simult|too many|demasiad|rate limit|service invoked/i;
+
 /**
  * Ejecuta una funcion del servidor y devuelve una promesa con su respuesta.
  */
@@ -23,14 +36,46 @@ function llamarServidor(nombreFuncion, datos) {
  * Los errores de validacion conservan su lista de detalles (error.errores).
  */
 async function api(nombreFuncion, datos) {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await llamarApiUnaVez(nombreFuncion, datos);
+    } catch (error) {
+      const saturado = error.codigo === CODIGO_SISTEMA_OCUPADO || (!error.codigo && PATRON_SATURACION_GOOGLE.test(error.message));
+      if (!saturado || intento >= MAXIMO_REINTENTOS) {
+        throw error;
+      }
+      await esperar(ESPERA_BASE_REINTENTO_MS * Math.pow(2, intento) + Math.random() * 1000);
+    }
+  }
+}
+
+function esperar(milisegundos) {
+  return new Promise(function (resolver) {
+    setTimeout(resolver, milisegundos);
+  });
+}
+
+async function llamarApiUnaVez(nombreFuncion, datos) {
   const respuesta = await llamarServidor(nombreFuncion, datos);
   if (!respuesta || respuesta.ok !== true) {
-    const error = new Error(respuesta && respuesta.mensaje ? respuesta.mensaje : 'Respuesta invalida del servidor.');
+    const error = new Error(respuesta && respuesta.mensaje ? respuesta.mensaje : 'Respuesta inválida del servidor.');
     error.codigo = respuesta && respuesta.codigo;
     error.errores = respuesta && respuesta.errores;
+    if (error.codigo === CODIGO_SESION_TERMINADA) {
+      mostrarSesionTerminada(error.message);
+    }
     throw error;
   }
   return respuesta;
+}
+
+/**
+ * La navegacion fuera del iframe exige un clic del usuario, por eso se
+ * ofrece un enlace en vez de redirigir automaticamente.
+ */
+function mostrarSesionTerminada(mensaje) {
+  const urlApp = document.body.dataset.urlApp || '';
+  mostrarAviso(mensaje, 'error', urlApp ? { texto: 'Iniciar sesión', url: urlApp } : null, 0);
 }
 
 /**
@@ -46,22 +91,30 @@ function escapeHtml(texto) {
 }
 
 /**
- * Muestra u oculta el aviso flotante global.
+ * Muestra el aviso flotante global. duracionMs = 0 lo deja fijo.
  */
-function mostrarAviso(texto, tipo) {
+function mostrarAviso(texto, tipo, enlace, duracionMs) {
   let aviso = document.getElementById('aviso-global');
   if (!aviso) {
     aviso = document.createElement('div');
     aviso.id = 'aviso-global';
-    aviso.className = 'aviso';
-    aviso.setAttribute('role', 'status');
     document.body.appendChild(aviso);
   }
+  aviso.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
   aviso.textContent = texto;
+  if (enlace) {
+    const vinculo = document.createElement('a');
+    vinculo.href = enlace.url;
+    vinculo.target = '_top';
+    vinculo.textContent = enlace.texto;
+    aviso.appendChild(vinculo);
+  }
   aviso.className = 'aviso ' + (tipo === 'error' ? 'aviso-error' : 'aviso-ok');
   aviso.hidden = false;
   clearTimeout(mostrarAviso.temporizador);
-  mostrarAviso.temporizador = setTimeout(ocultarAviso, 6000);
+  if (duracionMs !== 0) {
+    mostrarAviso.temporizador = setTimeout(ocultarAviso, duracionMs || 6000);
+  }
 }
 
 function ocultarAviso() {
@@ -72,7 +125,7 @@ function ocultarAviso() {
 }
 
 /**
- * Formata una fecha ISO como fecha y hora local de Mexico.
+ * Formatea una fecha ISO como fecha y hora local de Mexico.
  */
 function formatearFechaHora(valor) {
   if (!valor) {
@@ -84,7 +137,7 @@ function formatearFechaHora(valor) {
   }
   return fecha.toLocaleString('es-MX', {
     day: '2-digit',
-    month: '2-digit',
+    month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
@@ -93,15 +146,147 @@ function formatearFechaHora(valor) {
 
 /**
  * Habilita/deshabilita un boton mientras dura una peticion.
+ * Guarda el HTML para no perder el icono del boton.
  */
 function marcarCargando(boton, cargando, textoReposo) {
   if (cargando) {
-    boton.dataset.textoReposo = boton.textContent;
+    boton.dataset.htmlReposo = boton.innerHTML;
     boton.disabled = true;
     boton.textContent = 'Procesando...';
   } else {
     boton.disabled = false;
-    boton.textContent = boton.dataset.textoReposo || textoReposo || boton.textContent;
+    if (boton.dataset.htmlReposo) {
+      boton.innerHTML = boton.dataset.htmlReposo;
+    } else if (textoReposo) {
+      boton.textContent = textoReposo;
+    }
   }
 }
+
+/**
+ * Texto visible del estatus con acentos; el valor interno no cambia.
+ */
+const ETIQUETAS_ESTATUS = {
+  'Pendiente': 'Pendiente',
+  'En Revision': 'En revisión',
+  'Aprobado': 'Aprobado',
+  'Observado': 'Observado',
+  'Completo': 'Completo'
+};
+
+const CLASES_ESTATUS = {
+  'Pendiente': 'estado-pendiente',
+  'En Revision': 'estado-revision',
+  'Aprobado': 'estado-aprobado',
+  'Observado': 'estado-observado',
+  'Completo': 'estado-aprobado'
+};
+
+function crearEtiquetaEstatus(estatus) {
+  return '<span class="estado ' + (CLASES_ESTATUS[estatus] || 'estado-pendiente') + '">' +
+    escapeHtml(ETIQUETAS_ESTATUS[estatus] || estatus) + '</span>';
+}
+
+/* ---------------- Linea de tiempo del historial ---------------- */
+
+const TIPOS_DOCUMENTO_HISTORIAL = ['CURP', 'Acta de nacimiento', 'Certificado'];
+
+/**
+ * Frase legible para un registro: "Se cargó CURP", "CURP aprobado"...
+ */
+function describirEventoHistorial(registro) {
+  const documento = registro.tipo_documento;
+  if (TIPOS_DOCUMENTO_HISTORIAL.indexOf(documento) === -1) {
+    return documento + ': ' + registro.estatus_anterior + ' → ' + registro.estatus_nuevo;
+  }
+  if (registro.estatus_nuevo === 'En Revision') {
+    return registro.estatus_anterior === 'Observado' ? 'Se volvió a cargar ' + documento : 'Se cargó ' + documento;
+  }
+  if (registro.estatus_nuevo === 'Aprobado') {
+    return documento + ' aprobado';
+  }
+  if (registro.estatus_nuevo === 'Observado') {
+    return documento + ' observado';
+  }
+  return documento + ': ' + (ETIQUETAS_ESTATUS[registro.estatus_nuevo] || registro.estatus_nuevo);
+}
+
+/**
+ * Dibuja el historial como linea de tiempo.
+ * opciones: { mostrarUsuario, mostrarEstudiante, vacio }
+ */
+function renderLineaTiempo(registros, opciones) {
+  const config = opciones || {};
+  if (!registros || !registros.length) {
+    return '<p class="vacio">' + escapeHtml(config.vacio || 'Todavía no hay movimientos registrados.') + '</p>';
+  }
+  return '<ol class="linea-tiempo">' + registros.map(function (registro) {
+    const clase = CLASES_ESTATUS[registro.estatus_nuevo] || 'estado-pendiente';
+    const meta = [formatearFechaHora(registro.fecha_hora)];
+    if (config.mostrarUsuario && registro.usuario) {
+      meta.push(registro.usuario);
+    }
+    if (config.mostrarEstudiante && registro.matricula) {
+      meta.push((registro.nombre_estudiante ? registro.nombre_estudiante + ' · ' : '') + registro.matricula);
+    }
+    // Solo se muestra el texto cuando aporta: motivo de observacion o cambios administrativos.
+    const esDocumento = TIPOS_DOCUMENTO_HISTORIAL.indexOf(registro.tipo_documento) !== -1;
+    const detalle = registro.observacion && (!esDocumento || registro.estatus_nuevo === 'Observado')
+      ? '<p class="evento-detalle">' + escapeHtml(registro.observacion) + '</p>'
+      : '';
+    return '<li class="evento">' +
+      '<span class="evento-punto ' + clase + '"></span>' +
+      '<div class="evento-cuerpo">' +
+        '<p class="evento-titulo">' + escapeHtml(describirEventoHistorial(registro)) + '</p>' +
+        '<p class="evento-meta">' + escapeHtml(meta.join(' · ')) + '</p>' +
+        detalle +
+      '</div>' +
+    '</li>';
+  }).join('') + '</ol>';
+}
+
+/**
+ * Iconos de linea (trazos de 24x24) para botones y tarjetas.
+ */
+const TRAZOS_ICONOS = {
+  usuarios: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  reloj: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  alerta: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+  carpeta: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="m9 13 2 2 4-4"/>',
+  correo: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-10 5L2 7"/>',
+  grafica: '<path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V8"/><path d="M17 16v-3"/>',
+  persona: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  subir: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  ajustes: '<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/>',
+  historial: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  documento: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  ojo: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  cerrar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  salir: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  revisar: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  mas: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  menos: '<path d="M5 12h14"/>',
+  girar: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  descargar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>'
+};
+
+function icono(nombre) {
+  return '<svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (TRAZOS_ICONOS[nombre] || '') + '</svg>';
+}
+
+/**
+ * Sustituye cada <i data-icono="nombre"></i> del HTML estatico por su SVG.
+ */
+function pintarIconos(raiz) {
+  (raiz || document).querySelectorAll('i[data-icono]').forEach(function (elemento) {
+    elemento.outerHTML = icono(elemento.dataset.icono);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  pintarIconos();
+});
 </script>

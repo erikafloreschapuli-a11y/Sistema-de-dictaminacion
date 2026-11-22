@@ -1,6 +1,7 @@
 /**
  * Codigo.js
- * Punto de entrada de la aplicacion web: doGet y ruteo por rol (RF-03 a RF-05).
+ * Punto de entrada de la aplicacion web: doGet, pantalla de inicio de sesion
+ * y ruteo por rol (RF-03 a RF-05).
  */
 
 // Paneles disponibles por rol. El rol decidido en el servidor manda (RF-06).
@@ -15,31 +16,69 @@ const VISTAS_ADICIONALES_POR_ROL = {
   Administrador: ['dictaminador']
 };
 
+// Vista de la pantalla de inicio de sesion y de acceso denegado.
+const VISTA_INICIO = 'inicio';
+
+// Modos de la pantalla de inicio.
+const MODOS_INICIO = {
+  INGRESAR: 'ingresar',
+  SALIDA: 'salida',
+  DENEGADO: 'denegado'
+};
+
+const TITULO_APLICACION = 'Dictaminación de documentos - UTP';
+
 /**
- * Sirve el panel que corresponde al rol de la sesion activa.
+ * Flujo: Google identifica la cuenta -> pantalla de inicio -> "Ingresar"
+ * abre la sesion -> panel del rol. "Cerrar sesion" la elimina.
  * Un parametro ?panel= ajeno al rol se ignora: nunca otorga permisos.
  */
 function doGet(e) {
+  const parametros = e && e.parameter ? e.parameter : {};
+  const accion = String(parametros.accion || '').trim().toLowerCase();
+  const panel = String(parametros.panel || '').trim().toLowerCase();
+
+  let usuario;
   try {
-    const usuario = obtenerUsuarioActual();
-    const vistaEsperada = VISTAS_POR_ROL[usuario.rol];
-    if (!vistaEsperada) {
-      throw crearError('ROL', 'Tu usuario no tiene un panel asignado.');
+    usuario = obtenerUsuarioActual();
+  } catch (error) {
+    console.warn('Acceso denegado: ' + error.message);
+    return construirPaginaInicio({ modo: MODOS_INICIO.DENEGADO, mensaje: error.message, usuario: null });
+  }
+
+  try {
+    if (accion === ACCIONES_SESION.SALIR) {
+      cerrarSesion(usuario.correo);
+      return construirPaginaInicio({ modo: MODOS_INICIO.SALIDA, usuario: usuario, panel: panel });
     }
-    const parametroPanel = e && e.parameter ? String(e.parameter.panel || '') : '';
-    const vistaSolicitada = VISTAS_POR_ROL[parametroPanel.charAt(0).toUpperCase() + parametroPanel.slice(1)];
-    const vistasPermitidas = obtenerVistasPermitidasPorRol(usuario.rol);
-    const nombreVista = vistaSolicitada && vistasPermitidas.indexOf(vistaSolicitada) !== -1
-      ? vistaSolicitada
-      : vistaEsperada;
-    return construirPagina(nombreVista, usuario);
+    if (accion === ACCIONES_SESION.INGRESAR) {
+      iniciarSesion(usuario.correo);
+    }
+    if (!tieneSesionActiva(usuario.correo)) {
+      return construirPaginaInicio({ modo: MODOS_INICIO.INGRESAR, usuario: usuario, panel: panel });
+    }
+    return construirPagina(resolverVista(usuario.rol, panel), usuario);
   } catch (error) {
     console.error('Error al servir la pagina: ' + error.message);
     return construirPaginaDeAviso(
-      'No se pudo iniciar la sesion: ' + (error.message || 'error inesperado'),
+      'No se pudo iniciar la sesión: ' + (error.message || 'error inesperado'),
       'Error de acceso'
     );
   }
+}
+
+/**
+ * Elige la vista solicitada solo si el rol la tiene permitida.
+ */
+function resolverVista(rol, panelSolicitado) {
+  const vistaEsperada = VISTAS_POR_ROL[rol];
+  if (!vistaEsperada) {
+    throw crearError('ROL', 'Tu usuario no tiene un panel asignado.');
+  }
+  const vistaSolicitada = VISTAS_POR_ROL[panelSolicitado.charAt(0).toUpperCase() + panelSolicitado.slice(1)];
+  return vistaSolicitada && obtenerVistasPermitidasPorRol(rol).indexOf(vistaSolicitada) !== -1
+    ? vistaSolicitada
+    : vistaEsperada;
 }
 
 /**
@@ -60,6 +99,26 @@ function include(nombreArchivo) {
 }
 
 /**
+ * Datos comunes de la cabecera de todos los paneles.
+ */
+function construirDatosCabecera(usuario) {
+  const urlApp = obtenerUrlApp();
+  return {
+    urlApp: urlApp,
+    urlSalir: urlApp + '?accion=' + ACCIONES_SESION.SALIR,
+    iniciales: obtenerIniciales(usuario.nombre || usuario.correo)
+  };
+}
+
+function obtenerIniciales(texto) {
+  const palabras = String(texto || '').replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
+  const iniciales = palabras.slice(0, 2).map(function (palabra) {
+    return palabra.charAt(0).toUpperCase();
+  }).join('');
+  return iniciales || '?';
+}
+
+/**
  * Construye la pagina del panel; si la vista aun no existe (desarrollo por
  * fases) entrega un aviso claro en vez de un error en blanco.
  */
@@ -67,15 +126,53 @@ function construirPagina(nombreVista, usuario) {
   try {
     const plantilla = HtmlService.createTemplateFromFile(nombreVista);
     plantilla.usuario = usuario;
-    return plantilla
-      .evaluate()
-      .setTitle('Dictaminacion de documentos - UTP 2026')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    plantilla.cabecera = construirDatosCabecera(usuario);
+    return finalizarPagina(plantilla.evaluate(), TITULO_APLICACION);
   } catch (error) {
     console.warn('Vista ' + nombreVista + ' no disponible: ' + error.message);
-    return construirPaginaDeAviso('El panel de ' + usuario.rol + ' esta en construccion.', 'Por construir');
+    return construirPaginaDeAviso('El panel de ' + usuario.rol + ' está en construcción.', 'Por construir');
   }
+}
+
+/**
+ * Pantalla de inicio de sesion. En modo denegado explica el motivo y
+ * ofrece cambiar de cuenta, el caso tipico de quien entra con su Gmail.
+ */
+function construirPaginaInicio(opciones) {
+  const urlApp = obtenerUrlApp();
+  const panel = opciones.panel && VISTAS_POR_ROL[opciones.panel.charAt(0).toUpperCase() + opciones.panel.slice(1)]
+    ? '&panel=' + encodeURIComponent(opciones.panel)
+    : '';
+  const plantilla = HtmlService.createTemplateFromFile(VISTA_INICIO);
+  plantilla.modo = opciones.modo;
+  plantilla.mensaje = opciones.mensaje || '';
+  const usuario = opciones.usuario;
+  plantilla.usuario = usuario;
+  plantilla.iniciales = usuario ? obtenerIniciales(usuario.nombre || usuario.correo) : '';
+  plantilla.urlIngresar = urlApp + '?accion=' + ACCIONES_SESION.INGRESAR + panel;
+  plantilla.urlCambiarCuenta = URL_CAMBIAR_CUENTA_GOOGLE + encodeURIComponent(urlApp);
+  plantilla.dominioPersonal = DOMINIO_TRABAJADORES;
+  plantilla.dominioEstudiante = DOMINIO_ESTUDIANTE;
+  plantilla.generacion = String(obtenerValorConfiguracionSegura('GENERACION_ACTIVA'));
+  return finalizarPagina(plantilla.evaluate(), 'Iniciar sesión - ' + TITULO_APLICACION);
+}
+
+/**
+ * Lee configuracion sin romper la pantalla de inicio si el libro no esta listo.
+ */
+function obtenerValorConfiguracionSegura(clave) {
+  try {
+    return obtenerValorConfiguracion(clave);
+  } catch (error) {
+    return CONFIGURACION_PREDETERMINADA[clave];
+  }
+}
+
+function finalizarPagina(salida, titulo) {
+  return salida
+    .setTitle(titulo)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 /**

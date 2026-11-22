@@ -51,13 +51,68 @@ function inicializarBaseDeDatos() {
       hoja = libro.insertSheet(nombre);
       hojasCreadas.push(nombre);
     }
+    const encabezados = COLUMNAS_HOJAS[claveHoja];
     if (hoja.getLastRow() === 0) {
-      const encabezados = COLUMNAS_HOJAS[claveHoja];
       hoja.appendRow(encabezados);
       hoja.getRange(1, 1, 1, encabezados.length).setFontWeight('bold');
+      hoja.setFrozenRows(1);
     }
+    quitarColumnasVacias(hoja, encabezados.length);
   });
   return { ok: true, hojasCreadas: hojasCreadas };
+}
+
+/**
+ * Una hoja nueva trae 26 columnas y todas cuentan para el limite de
+ * 10 millones de celdas del libro. Se eliminan las que sobran, solo si
+ * estan vacias.
+ */
+function quitarColumnasVacias(hoja, columnasUsadas) {
+  const totalColumnas = hoja.getMaxColumns();
+  if (totalColumnas > columnasUsadas && hoja.getLastColumn() <= columnasUsadas) {
+    hoja.deleteColumns(columnasUsadas + 1, totalColumnas - columnasUsadas);
+  }
+}
+
+/**
+ * Devuelve las filas cuyo valor en una columna coincide exactamente (sin
+ * distinguir mayusculas). Usa TextFinder para no leer toda la hoja: con
+ * decenas de miles de registros de historial la diferencia es grande.
+ * maximo limita a las ultimas coincidencias (las mas recientes).
+ */
+function buscarFilasPorValor(nombreHoja, nombreColumna, valorBuscado, maximo) {
+  const valor = String(valorBuscado === undefined || valorBuscado === null ? '' : valorBuscado).trim();
+  const hoja = obtenerLibroMaestro().getSheetByName(nombreHoja);
+  if (!valor || !hoja || hoja.getLastRow() < 2) {
+    return [];
+  }
+  const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  const indice = encabezados.indexOf(nombreColumna);
+  if (indice === -1) {
+    throw crearError('CONFIGURACION', 'Columna desconocida en la hoja ' + nombreHoja + ': ' + nombreColumna);
+  }
+  let coincidencias = hoja.getRange(2, indice + 1, hoja.getLastRow() - 1, 1)
+    .createTextFinder(valor)
+    .matchEntireCell(true)
+    .matchCase(false)
+    .findAll();
+  if (maximo && coincidencias.length > maximo) {
+    coincidencias = coincidencias.slice(coincidencias.length - maximo);
+  }
+  const numerosFila = coincidencias.map(function (celda) {
+    return celda.getRow();
+  });
+  // Pocas filas: se leen una por una. Muchas: una sola lectura completa es
+  // mas rapida que decenas de llamadas a getValues.
+  const todas = numerosFila.length > MAXIMO_LECTURAS_INDIVIDUALES ? hoja.getDataRange().getValues() : null;
+  return numerosFila.map(function (numeroFila) {
+    const valores = todas ? todas[numeroFila - 1] : hoja.getRange(numeroFila, 1, 1, encabezados.length).getValues()[0];
+    const fila = { _fila: numeroFila };
+    encabezados.forEach(function (encabezado, posicion) {
+      fila[encabezado] = valores[posicion];
+    });
+    return fila;
+  });
 }
 
 /**
@@ -110,7 +165,7 @@ function insertarRegistros(nombreHoja, registros) {
   const libro = obtenerLibroMaestro();
   const hoja = libro.getSheetByName(nombreHoja);
   if (!hoja) {
-    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta inicializarBaseDeDatos().');
+    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta instalarSistema() desde el editor.');
   }
   const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
   const filas = registros.map(function (registro) {
@@ -131,7 +186,7 @@ function actualizarRegistro(nombreHoja, numeroFila, cambios) {
   const libro = obtenerLibroMaestro();
   const hoja = libro.getSheetByName(nombreHoja);
   if (!hoja) {
-    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta inicializarBaseDeDatos().');
+    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta instalarSistema() desde el editor.');
   }
   const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
   Object.keys(cambios).forEach(function (clave) {
@@ -145,15 +200,47 @@ function actualizarRegistro(nombreHoja, numeroFila, cambios) {
 }
 
 /**
+ * Sobrescribe una columna completa desde la fila 2, en el mismo orden que
+ * devuelve leerHoja(). Una sola llamada evita agotar el tiempo con miles de
+ * filas (RNF-04). Sin lock: el llamador debe envolverlo con conBloqueoEscritura().
+ */
+function escribirColumna(nombreHoja, nombreColumna, valores) {
+  if (!valores.length) {
+    return 0;
+  }
+  const libro = obtenerLibroMaestro();
+  const hoja = libro.getSheetByName(nombreHoja);
+  if (!hoja) {
+    throw crearError('CONFIGURACION', 'La hoja ' + nombreHoja + ' no existe. Ejecuta instalarSistema() desde el editor.');
+  }
+  const encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  const indice = encabezados.indexOf(nombreColumna);
+  if (indice === -1) {
+    throw crearError('CONFIGURACION', 'Columna desconocida en la hoja ' + nombreHoja + ': ' + nombreColumna);
+  }
+  const filas = valores.map(function (valor) {
+    return [valor === undefined || valor === null ? '' : valor];
+  });
+  hoja.getRange(2, indice + 1, filas.length, 1).setValues(filas);
+  return filas.length;
+}
+
+/**
  * Ejecuta una funcion dentro del lock de escritura del script (RNF-03).
  * Evita que dos dictaminadores o administradores pisen la misma celda.
  */
 function conBloqueoEscritura(callback) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(TIEMPO_ESPERA_BLOQUEO_MS);
+  if (!lock.tryLock(TIEMPO_ESPERA_BLOQUEO_MS)) {
+    // Codigo OCUPADO: el navegador reintenta solo (ver api() en scripts.html).
+    throw crearError('OCUPADO', 'Hay muchas personas usando el sistema en este momento. Intenta de nuevo en unos segundos.');
+  }
   try {
     return callback();
   } finally {
+    // Sin flush, la siguiente ejecucion podria leer la hoja antes de que
+    // se apliquen estas escrituras y sobrescribirlas (RNF-03).
+    SpreadsheetApp.flush();
     lock.releaseLock();
   }
 }

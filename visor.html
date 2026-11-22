@@ -1,0 +1,169 @@
+<!-- visor.html - Visor de documentos que no depende de permisos de Drive.
+     El archivo llega por apiObtenerArchivo y se dibuja en el navegador.
+     Se usa PDF.js porque Chrome bloquea su visor nativo de PDF dentro del
+     iframe con sandbox en el que Apps Script sirve la pagina. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+const URL_TRABAJADOR_PDF = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const TIPO_MIME_PDF = 'application/pdf';
+const PASO_ZOOM = 0.25;
+const ZOOM_MINIMO = 0.5;
+const ZOOM_MAXIMO = 3;
+const MARGEN_LIENZO_PX = 32;
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = URL_TRABAJADOR_PDF;
+}
+
+// Archivos ya descargados en esta pagina; la version (fecha de carga) evita
+// mostrar un archivo viejo si el estudiante lo reemplazo.
+const archivosDescargados = {};
+
+function obtenerArchivoDocumento(matricula, tipoDocumento, version) {
+  const clave = [matricula, tipoDocumento, version].join('|');
+  if (!archivosDescargados[clave]) {
+    archivosDescargados[clave] = api('apiObtenerArchivo', { matricula: matricula, tipoDocumento: tipoDocumento })
+      .catch(function (error) {
+        delete archivosDescargados[clave];
+        throw error;
+      });
+  }
+  return archivosDescargados[clave];
+}
+
+function convertirBase64ABytes(base64) {
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) {
+    bytes[i] = binario.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Dibuja el visor dentro del contenedor.
+ * opciones: { matricula, tipoDocumento, version }
+ */
+async function mostrarVisor(contenedor, opciones) {
+  const turno = {};
+  contenedor.turnoVisor = turno;
+  contenedor.innerHTML = '<div class="visor"><div class="visor-mensaje"><p class="cargando">Cargando documento...</p></div></div>';
+
+  let archivo;
+  try {
+    archivo = await obtenerArchivoDocumento(opciones.matricula, opciones.tipoDocumento, opciones.version);
+  } catch (error) {
+    if (contenedor.turnoVisor === turno) {
+      contenedor.innerHTML = '<div class="visor"><div class="visor-mensaje">' + escapeHtml(error.message) + '</div></div>';
+    }
+    return;
+  }
+  // Si el usuario ya eligio otro documento, no se pisa la vista nueva.
+  if (contenedor.turnoVisor !== turno) {
+    return;
+  }
+
+  const bytes = convertirBase64ABytes(archivo.contenidoBase64);
+  const urlDescarga = URL.createObjectURL(new Blob([bytes], { type: archivo.tipoMime }));
+  contenedor.innerHTML =
+    '<div class="visor">' +
+      '<div class="visor-barra">' +
+        '<span class="visor-nombre" title="' + escapeHtml(archivo.nombre) + '">' + escapeHtml(archivo.nombre) + '</span>' +
+        '<button type="button" class="visor-boton" data-visor="menos" title="Alejar">' + icono('menos') + '</button>' +
+        '<span class="visor-zoom">100%</span>' +
+        '<button type="button" class="visor-boton" data-visor="mas" title="Acercar">' + icono('mas') + '</button>' +
+        '<button type="button" class="visor-boton" data-visor="girar" title="Girar">' + icono('girar') + '</button>' +
+        '<a class="visor-boton" href="' + urlDescarga + '" download="' + escapeHtml(archivo.nombre) + '" title="Descargar">' + icono('descargar') + '</a>' +
+      '</div>' +
+      '<div class="visor-lienzo"></div>' +
+    '</div>';
+
+  const lienzo = contenedor.querySelector('.visor-lienzo');
+  const etiquetaZoom = contenedor.querySelector('.visor-zoom');
+  const estado = { zoom: 1, rotacion: 0 };
+  const dibujar = archivo.tipoMime === TIPO_MIME_PDF
+    ? await prepararPdf(lienzo, bytes)
+    : prepararImagen(lienzo, archivo);
+
+  if (!dibujar) {
+    return;
+  }
+  dibujar(estado);
+
+  contenedor.querySelector('.visor-barra').addEventListener('click', function (evento) {
+    const boton = evento.target.closest('button[data-visor]');
+    if (!boton) {
+      return;
+    }
+    if (boton.dataset.visor === 'mas') {
+      estado.zoom = Math.min(ZOOM_MAXIMO, estado.zoom + PASO_ZOOM);
+    } else if (boton.dataset.visor === 'menos') {
+      estado.zoom = Math.max(ZOOM_MINIMO, estado.zoom - PASO_ZOOM);
+    } else {
+      estado.rotacion = (estado.rotacion + 90) % 360;
+    }
+    etiquetaZoom.textContent = Math.round(estado.zoom * 100) + '%';
+    dibujar(estado);
+  });
+}
+
+function prepararImagen(lienzo, archivo) {
+  const imagen = new Image();
+  imagen.alt = archivo.nombre;
+  imagen.src = 'data:' + archivo.tipoMime + ';base64,' + archivo.contenidoBase64;
+  lienzo.appendChild(imagen);
+  return function (estado) {
+    const anchoDisponible = Math.max(lienzo.clientWidth - MARGEN_LIENZO_PX, 200);
+    imagen.style.width = Math.round(anchoDisponible * estado.zoom) + 'px';
+    imagen.style.transform = 'rotate(' + estado.rotacion + 'deg)';
+  };
+}
+
+/**
+ * Carga el PDF una vez y devuelve la funcion que lo vuelve a dibujar con
+ * el zoom y giro actuales. Cada pagina se ajusta al ancho del visor.
+ */
+async function prepararPdf(lienzo, bytes) {
+  if (!window.pdfjsLib) {
+    lienzo.innerHTML = '<div class="visor-mensaje">No se pudo cargar el visor de PDF. Usa el botón de descarga para ver el archivo.</div>';
+    return null;
+  }
+  let pdf;
+  try {
+    pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  } catch (error) {
+    lienzo.innerHTML = '<div class="visor-mensaje">El PDF no se pudo abrir. Puede estar dañado o protegido.</div>';
+    return null;
+  }
+
+  let dibujando = Promise.resolve();
+  return function (estado) {
+    dibujando = dibujando.then(function () {
+      return dibujarPaginasPdf(pdf, lienzo, estado);
+    });
+  };
+}
+
+async function dibujarPaginasPdf(pdf, lienzo, estado) {
+  const anchoDisponible = Math.max(lienzo.clientWidth - MARGEN_LIENZO_PX, 200);
+  const densidad = window.devicePixelRatio || 1;
+  const lienzos = [];
+  for (let numero = 1; numero <= pdf.numPages; numero++) {
+    const pagina = await pdf.getPage(numero);
+    const base = pagina.getViewport({ scale: 1, rotation: estado.rotacion });
+    const escala = (anchoDisponible / base.width) * estado.zoom;
+    const vista = pagina.getViewport({ scale: escala * densidad, rotation: estado.rotacion });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(vista.width);
+    canvas.height = Math.floor(vista.height);
+    canvas.style.width = Math.floor(vista.width / densidad) + 'px';
+    canvas.style.height = Math.floor(vista.height / densidad) + 'px';
+    await pagina.render({ canvasContext: canvas.getContext('2d'), viewport: vista }).promise;
+    lienzos.push(canvas);
+  }
+  lienzo.innerHTML = '';
+  lienzos.forEach(function (canvas) {
+    lienzo.appendChild(canvas);
+  });
+}
+</script>
