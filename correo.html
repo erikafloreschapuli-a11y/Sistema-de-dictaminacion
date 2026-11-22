@@ -2,7 +2,7 @@
      Los clientes de correo (Gmail, Outlook) ignoran hojas de estilo y la
      mayoria del CSS moderno: por eso se usan tablas y estilos en linea.
      Datos: titulo, colorTitulo, estudiante, parrafos, documentos, urlApp,
-     generacion, fecha, area. Los <?= ?> escapan el texto automaticamente. -->
+     generacion, fecha, area, srcLogo. Los <?= ?> escapan el texto automaticamente. -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -21,10 +21,12 @@
             <td style="padding:20px 24px;background:#14532d;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td width="52" valign="middle">
-                    <div style="width:46px;height:46px;line-height:46px;border-radius:10px;background:#ffffff;color:#14532d;font-weight:bold;font-size:14px;text-align:center;">UTP</div>
+                  <td width="64" valign="middle">
+                    <!-- srcLogo es una constante del servidor (cid: o data:); se imprime sin escapar porque el
+                         escape automatico de Apps Script bloquea esos esquemas en atributos src. -->
+                    <img src="<?!= srcLogo ?>" width="60" height="60" alt="Escudo UTP" style="display:block;width:60px;height:60px;border:0;">
                   </td>
-                  <td valign="middle" style="padding-left:12px;color:#ffffff;">
+                  <td valign="middle" style="padding-left:14px;color:#ffffff;">
                     <div style="font-size:19px;font-weight:bold;">Universidad Tecnológica de Puebla</div>
                     <div style="font-size:12px;opacity:0.85;margin-top:2px;"><?= area ?></div>
                   </td>

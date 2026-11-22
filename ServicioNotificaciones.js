@@ -124,6 +124,8 @@ function construirCorreoHtml(estudiante, cuerpo, generacion, formato) {
     plantilla.parrafos = dividirEnParrafos(cuerpo);
     plantilla.documentos = construirFilasDocumentosCorreo(formato.expediente, formato.documentoDestacado);
     plantilla.urlApp = obtenerUrlApp();
+    // "cid:" apunta a la imagen adjunta con inlineImages en enviarCorreoNotificacion.
+    plantilla.srcLogo = 'cid:' + ID_LOGO_CORREO;
     plantilla.fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy 'a las' HH:mm");
     return plantilla.evaluate().getContent();
   } catch (error) {
@@ -176,6 +178,7 @@ function enviarCorreoNotificacion(destino, asunto, cuerpo, html) {
     const mensaje = { to: destino, subject: asunto, body: cuerpo, name: NOMBRE_REMITENTE_CORREO };
     if (html) {
       mensaje.htmlBody = html;
+      mensaje.inlineImages = construirImagenesCorreo();
     }
     MailApp.sendEmail(mensaje);
     return { enviado: true, motivo: '' };
@@ -183,6 +186,20 @@ function enviarCorreoNotificacion(destino, asunto, cuerpo, html) {
     console.error('No se pudo enviar el correo a ' + destino + ': ' + error.message);
     return { enviado: false, motivo: MOTIVOS_CORREO_NO_ENVIADO.ERROR_ENVIO };
   }
+}
+
+/**
+ * Imagenes incrustadas del correo: el escudo viaja dentro del mensaje, asi
+ * se ve aunque el cliente bloquee imagenes externas.
+ */
+function construirImagenesCorreo() {
+  const imagenes = {};
+  imagenes[ID_LOGO_CORREO] = Utilities.newBlob(
+    Utilities.base64Decode(LOGO_INSTITUCIONAL_BASE64),
+    'image/png',
+    'escudo-utp.png'
+  );
+  return imagenes;
 }
 
 /**
