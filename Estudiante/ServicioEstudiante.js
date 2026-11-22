@@ -89,7 +89,12 @@ function apiSubirDocumento(datos) {
     const usuario = asegurarRol([ROLES.ESTUDIANTE]);
     const tipoDocumento = obtenerTipoDocumentoValido(datos && datos.tipoDocumento);
     const estudiante = obtenerEstudianteParaUsuario(usuario, datos && datos.matricula);
-    return procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos || {});
+    const resultado = procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos || {});
+    // Acuse de recibo despues de guardar: si el correo falla, la carga ya
+    // quedo registrada y el alumno ve su estatus en el sistema.
+    const expediente = construirExpedientes([estudiante], leerDocumentosDeEstudiante(estudiante.matricula))[0];
+    resultado.acuseEnviado = notificarDocumentoRecibido(estudiante, expediente, tipoDocumento).enviado;
+    return resultado;
   });
 }
 

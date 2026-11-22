@@ -19,10 +19,13 @@ const VISTA_CORREO = 'correo';
 const NOMBRE_REMITENTE_CORREO = 'Servicios Escolares UTP';
 const AREA_CORREO = 'Subdirección de Servicios Escolares';
 
-// Titulo y color de la barra superior de cada aviso.
+// Titulo, color de la barra superior y fondo de la fila destacada de cada
+// aviso. Los cuatro correos comparten correo.html; solo cambia esto.
 const AVISOS_CORREO = {
-  OBSERVADO: { titulo: 'Documento con observaciones', color: '#b91c1c' },
-  COMPLETO: { titulo: 'Expediente completo', color: '#15803d' }
+  PENDIENTE: { titulo: 'Documentos pendientes por subir', color: '#4b5563', fondoDestacado: '#f3f4f6' },
+  RECIBIDO: { titulo: 'Documento recibido · En revisión', color: '#b45309', fondoDestacado: '#fffbeb' },
+  OBSERVADO: { titulo: 'Documento con observaciones', color: '#b91c1c', fondoDestacado: '#fef2f2' },
+  COMPLETO: { titulo: 'Expediente completo', color: '#15803d', fondoDestacado: '#f0fdf4' }
 };
 
 // Colores del semaforo en el correo (los clientes de correo no leen las
@@ -33,6 +36,47 @@ const COLORES_ESTATUS_CORREO = {
   'Aprobado': { etiqueta: 'Aprobado', fondo: '#dcfce7', texto: '#166534' },
   'Observado': { etiqueta: 'Observado', fondo: '#fee2e2', texto: '#b91c1c' }
 };
+
+/**
+ * Recuerda al estudiante los documentos que le faltan por subir.
+ * Devuelve { enviado, motivo }.
+ */
+function notificarDocumentosPendientes(estudiante, expediente) {
+  const faltantes = (expediente.documentos || []).filter(function (documento) {
+    return documento.estatus === ESTATUS_DOCUMENTO.PENDIENTE;
+  }).map(function (documento) {
+    return documento.tipo_documento;
+  });
+  const valores = construirValoresPlantilla(estudiante, { faltantes: unirConY(faltantes) });
+  return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_PENDIENTE', 'PLANTILLA_CORREO_PENDIENTE', valores, {
+    aviso: AVISOS_CORREO.PENDIENTE,
+    expediente: expediente,
+    documentosDestacados: faltantes
+  });
+}
+
+/**
+ * Acuse de recibo: el documento se cargo y quedo en revision.
+ * Devuelve { enviado, motivo }.
+ */
+function notificarDocumentoRecibido(estudiante, expediente, tipoDocumento) {
+  const valores = construirValoresPlantilla(estudiante, { documento: tipoDocumento });
+  return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_RECIBIDO', 'PLANTILLA_CORREO_RECIBIDO', valores, {
+    aviso: AVISOS_CORREO.RECIBIDO,
+    expediente: expediente,
+    documentosDestacados: [tipoDocumento]
+  });
+}
+
+/**
+ * "CURP, Acta de nacimiento y Certificado": lista legible para el correo.
+ */
+function unirConY(elementos) {
+  if (elementos.length <= 1) {
+    return elementos.join('');
+  }
+  return elementos.slice(0, -1).join(', ') + ' y ' + elementos.at(-1);
+}
 
 /**
  * Notifica al estudiante que un documento quedo observado (RF-27).
@@ -47,7 +91,8 @@ function notificarDocumentoObservado(estudiante, expediente, tipoDocumento, obse
   return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_OBSERVADO', 'PLANTILLA_CORREO_OBSERVADO', valores, {
     aviso: AVISOS_CORREO.OBSERVADO,
     expediente: expediente,
-    documentoDestacado: tipoDocumento,
+    documentosDestacados: [tipoDocumento],
+    mostrarObservacion: true,
     // Quien abre el correo sin HTML tambien debe ver que corregir.
     textoAdicional: 'Observación del dictaminador sobre ' + tipoDocumento + ': ' + observacion
   });
@@ -62,7 +107,7 @@ function notificarExpedienteCompleto(estudiante, expediente) {
   return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_COMPLETO', 'PLANTILLA_CORREO_COMPLETO', valores, {
     aviso: AVISOS_CORREO.COMPLETO,
     expediente: expediente,
-    documentoDestacado: ''
+    documentosDestacados: []
   });
 }
 
@@ -122,7 +167,7 @@ function construirCorreoHtml(estudiante, cuerpo, generacion, formato) {
       correo: String(estudiante.correo_institucional || '')
     };
     plantilla.parrafos = dividirEnParrafos(cuerpo);
-    plantilla.documentos = construirFilasDocumentosCorreo(formato.expediente, formato.documentoDestacado);
+    plantilla.documentos = construirFilasDocumentosCorreo(formato);
     plantilla.urlApp = obtenerUrlApp();
     // "cid:" apunta a la imagen adjunta con inlineImages en enviarCorreoNotificacion.
     plantilla.srcLogo = 'cid:' + ID_LOGO_CORREO;
@@ -146,21 +191,23 @@ function dividirEnParrafos(texto) {
 }
 
 /**
- * Filas de la tabla de documentos. Solo el documento observado lleva la
- * observacion, para no repetir comentarios viejos de otros documentos.
+ * Filas de la tabla de documentos. Los documentos a los que se refiere el
+ * aviso se resaltan con el color del aviso. Solo el correo de observado
+ * muestra la observacion, para no repetir comentarios viejos.
  */
-function construirFilasDocumentosCorreo(expediente, documentoDestacado) {
-  const documentos = expediente && expediente.documentos ? expediente.documentos : [];
+function construirFilasDocumentosCorreo(formato) {
+  const documentos = formato.expediente && formato.expediente.documentos ? formato.expediente.documentos : [];
+  const destacados = formato.documentosDestacados || [];
   return documentos.map(function (documento) {
     const colores = COLORES_ESTATUS_CORREO[documento.estatus] || COLORES_ESTATUS_CORREO.Pendiente;
-    const destacado = documento.tipo_documento === documentoDestacado;
+    const destacado = destacados.indexOf(documento.tipo_documento) !== -1;
     return {
       tipo: documento.tipo_documento,
       estatus: colores.etiqueta,
       colorFondo: colores.fondo,
       colorTexto: colores.texto,
-      destacado: destacado,
-      observacion: destacado ? documento.observaciones : ''
+      fondoFila: destacado ? formato.aviso.fondoDestacado : '#ffffff',
+      observacion: destacado && formato.mostrarObservacion ? documento.observaciones : ''
     };
   });
 }

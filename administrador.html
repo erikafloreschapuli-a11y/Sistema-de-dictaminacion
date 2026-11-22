@@ -16,6 +16,8 @@
     .rejilla-dos .panel { margin-bottom: 0; }
     .tarjetas + .panel { margin-top: 18px; }
     .aviso-prueba { margin-bottom: 16px; font-size: 13px; }
+    .panel-recordatorio { margin-top: 22px; }
+    #estado-recordatorio p { color: var(--texto); }
     .progreso-prueba { height: 10px; border-radius: 999px; background: var(--gris-100); overflow: hidden; margin: 10px 0; }
     .progreso-prueba span { display: block; height: 100%; width: 0; background: var(--verde-600); transition: width 0.2s; }
     .lista-verificacion { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; font-size: 14px; }
@@ -72,6 +74,17 @@
       </div>
       <div id="contenedor-reportes">
         <p class="cargando">Cargando reportes...</p>
+      </div>
+
+      <!-- Recordatorio por correo a alumnos con documentos pendientes -->
+      <div class="panel panel-recordatorio">
+        <h3>Recordatorio a alumnos con documentos pendientes</h3>
+        <p class="panel-descripcion">Envía el correo "Documentos pendientes" a quienes aún no suben todo. Se envían los que permite la cuota diaria de Google; el resto sale solo al día siguiente y nadie lo recibe dos veces en la misma campaña.</p>
+        <div id="estado-recordatorio"><p class="cargando">Consultando...</p></div>
+        <div class="formulario-acciones">
+          <button type="button" class="boton" id="boton-recordatorio"><i data-icono="correo"></i>Enviar recordatorio</button>
+          <button type="button" class="boton boton-secundario" id="boton-recordatorio-nuevo" hidden>Iniciar una campaña nueva</button>
+        </div>
       </div>
     </section>
 
@@ -192,6 +205,24 @@
           Ejemplo: <code>Hola {{nombre}}:</code>
         </p>
         <form id="form-plantillas" class="formulario">
+          <h4>Documentos pendientes (recordatorio)</h4>
+          <label class="campo">Asunto
+            <input type="text" id="campo-ASUNTO_CORREO_PENDIENTE" maxlength="150" required>
+          </label>
+          <label class="campo">Texto del correo
+            <textarea id="campo-PLANTILLA_CORREO_PENDIENTE" maxlength="3000" required></textarea>
+          </label>
+          <p class="ayuda" id="ayuda-PLANTILLA_CORREO_PENDIENTE"></p>
+
+          <h4>Documento recibido (acuse, en revisión)</h4>
+          <label class="campo">Asunto
+            <input type="text" id="campo-ASUNTO_CORREO_RECIBIDO" maxlength="150" required>
+          </label>
+          <label class="campo">Texto del correo
+            <textarea id="campo-PLANTILLA_CORREO_RECIBIDO" maxlength="3000" required></textarea>
+          </label>
+          <p class="ayuda" id="ayuda-PLANTILLA_CORREO_RECIBIDO"></p>
+
           <h4>Documento observado</h4>
           <label class="campo">Asunto
             <input type="text" id="campo-ASUNTO_CORREO_OBSERVADO" maxlength="150" required>
@@ -369,6 +400,10 @@
     ];
 
     const CLAVES_PLANTILLAS = [
+      'ASUNTO_CORREO_PENDIENTE',
+      'PLANTILLA_CORREO_PENDIENTE',
+      'ASUNTO_CORREO_RECIBIDO',
+      'PLANTILLA_CORREO_RECIBIDO',
       'ASUNTO_CORREO_OBSERVADO',
       'PLANTILLA_CORREO_OBSERVADO',
       'ASUNTO_CORREO_COMPLETO',
@@ -399,6 +434,9 @@
       document.getElementById('form-plantillas').addEventListener('submit', guardarPlantillas);
       document.getElementById('boton-restaurar-plantillas').addEventListener('click', restaurarPlantillas);
 
+      document.getElementById('boton-recordatorio').addEventListener('click', function () { enviarRecordatorio(false); });
+      document.getElementById('boton-recordatorio-nuevo').addEventListener('click', function () { enviarRecordatorio(true); });
+
       document.getElementById('form-prueba').addEventListener('submit', ejecutarPruebaCarga);
       document.getElementById('boton-limpiar-prueba').addEventListener('click', limpiarPruebaCarga);
       document.getElementById('prueba-cantidad').addEventListener('change', actualizarAyudaPrueba);
@@ -418,6 +456,7 @@
       });
 
       cargarReportes();
+      cargarEstadoRecordatorio();
     });
 
     /* ---------------- Navegacion por secciones ---------------- */
@@ -495,6 +534,63 @@
             '<span class="texto-secundario">' + avance + '%</span></td></tr>';
         }).join('') +
         '</tbody></table></div>';
+    }
+
+    /* ---------------- Recordatorio a pendientes ---------------- */
+
+    async function cargarEstadoRecordatorio() {
+      try {
+        const respuesta = await api('apiObtenerEstadoRecordatorio');
+        mostrarEstadoRecordatorio(respuesta.estado);
+      } catch (error) {
+        document.getElementById('estado-recordatorio').innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
+      }
+    }
+
+    function mostrarEstadoRecordatorio(estado) {
+      const campania = estado.campania;
+      const lineas = [];
+      if (!campania) {
+        lineas.push('No se ha enviado ningún recordatorio. Alumnos con documentos pendientes: <strong>' + estado.faltan + '</strong>.');
+      } else {
+        lineas.push('Campaña <strong>' + escapeHtml(campania.id) + '</strong> iniciada el ' + escapeHtml(formatearFechaHora(campania.inicio)) + '.');
+        lineas.push('Enviados: <strong>' + estado.enviados + '</strong> · Faltan: <strong>' + estado.faltan + '</strong>.');
+        if (campania.terminada) {
+          lineas.push('La campaña terminó: todos los alumnos con pendientes ya recibieron su recordatorio.');
+        } else if (campania.proximoEnvio) {
+          lineas.push('Los que faltan se enviarán solos el ' + escapeHtml(formatearFechaHora(campania.proximoEnvio)) + '.');
+        }
+      }
+      if (estado.cuotaRestante !== undefined && estado.cuotaRestante !== null) {
+        lineas.push('Correos disponibles hoy: ' + estado.cuotaRestante + '.');
+      }
+      document.getElementById('estado-recordatorio').innerHTML = '<p>' + lineas.join('<br>') + '</p>';
+      document.getElementById('boton-recordatorio-nuevo').hidden = !campania;
+      document.getElementById('boton-recordatorio').hidden = Boolean(campania && campania.terminada);
+    }
+
+    async function enviarRecordatorio(nueva) {
+      const mensaje = nueva
+        ? 'Se iniciará una campaña nueva: los alumnos con documentos pendientes recibirán otro recordatorio aunque ya hayan recibido uno antes. ¿Continuar?'
+        : 'Se enviará el correo "Documentos pendientes" a los alumnos que aún no suben todo. ¿Continuar?';
+      if (!confirm(mensaje)) {
+        return;
+      }
+      const boton = document.getElementById(nueva ? 'boton-recordatorio-nuevo' : 'boton-recordatorio');
+      marcarCargando(boton, true);
+      boton.textContent = 'Enviando… puede tardar unos minutos';
+      try {
+        const respuesta = await api('apiIniciarRecordatorio', { nueva: nueva });
+        const estado = respuesta.estado;
+        mostrarAviso('Se enviaron ' + estado.enviadosAhora + ' recordatorio(s).' +
+          (estado.faltan ? ' Faltan ' + estado.faltan + '; se enviarán solos.' : ''), 'ok');
+        await cargarEstadoRecordatorio();
+        estadoPagina.cargado.historial = false;
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
+      }
     }
 
     /* ---------------- Prueba de carga ---------------- */
@@ -875,7 +971,7 @@
         }
       });
       if (marcadores) {
-        ['PLANTILLA_CORREO_OBSERVADO', 'PLANTILLA_CORREO_COMPLETO'].forEach(function (clave) {
+        CLAVES_PLANTILLAS.filter(function (clave) { return clave.indexOf('PLANTILLA_') === 0; }).forEach(function (clave) {
           document.getElementById('ayuda-' + clave).textContent = 'Marcadores disponibles: ' +
             (marcadores[clave] || []).map(function (marcador) { return '{{' + marcador + '}}'; }).join(', ');
         });

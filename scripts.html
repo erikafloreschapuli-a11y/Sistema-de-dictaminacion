@@ -210,6 +210,9 @@ const TIPOS_DOCUMENTO_HISTORIAL = ['CURP', 'Acta de nacimiento', 'Certificado'];
  */
 function describirEventoHistorial(registro) {
   const documento = registro.tipo_documento;
+  if (documento === 'CORREO') {
+    return 'Se envió un recordatorio por correo';
+  }
   if (TIPOS_DOCUMENTO_HISTORIAL.indexOf(documento) === -1) {
     return documento + ': ' + registro.estatus_anterior + ' → ' + registro.estatus_nuevo;
   }

@@ -71,6 +71,22 @@ const RANGO_TAMANIO_ARCHIVO_MB = { MINIMO: 2, MAXIMO: 5 };
 // Son solo el mensaje: los datos del alumno, la tabla de documentos con la
 // observacion y el pie los agrega el formato de correo.html.
 const PLANTILLAS_CORREO_PREDETERMINADAS = {
+  ASUNTO_CORREO_PENDIENTE: 'Documentos pendientes - Dictaminación UTP {{generacion}}',
+  PLANTILLA_CORREO_PENDIENTE: [
+    'Hola {{nombre}}:',
+    '',
+    'Aún no recibimos todos los documentos de tu expediente de nuevo ingreso. Te falta: {{faltantes}}.',
+    '',
+    'Ingresa al sistema y súbelos en formato PDF. Abajo puedes ver el estatus de cada uno.'
+  ].join('\n'),
+  ASUNTO_CORREO_RECIBIDO: 'Recibimos tu {{documento}} - Dictaminación UTP {{generacion}}',
+  PLANTILLA_CORREO_RECIBIDO: [
+    'Hola {{nombre}}:',
+    '',
+    'Recibimos tu documento "{{documento}}" y ya está en revisión. Te avisaremos por correo si necesita corrección.',
+    '',
+    'Este correo es tu acuse de recibo; no necesitas responderlo.'
+  ].join('\n'),
   ASUNTO_CORREO_OBSERVADO: 'Documento observado - Dictaminación UTP {{generacion}}',
   PLANTILLA_CORREO_OBSERVADO: [
     'Hola {{nombre}}:',
@@ -105,6 +121,10 @@ const CLAVES_CONFIGURACION = Object.keys(CONFIGURACION_PREDETERMINADA);
 // Marcadores que acepta cada plantilla; uno distinto se rechaza al guardar
 // para que el estudiante nunca reciba un {{texto}} sin sustituir.
 const MARCADORES_PLANTILLA = {
+  ASUNTO_CORREO_PENDIENTE: ['nombre', 'matricula', 'generacion'],
+  PLANTILLA_CORREO_PENDIENTE: ['nombre', 'matricula', 'faltantes', 'generacion'],
+  ASUNTO_CORREO_RECIBIDO: ['nombre', 'matricula', 'documento', 'generacion'],
+  PLANTILLA_CORREO_RECIBIDO: ['nombre', 'matricula', 'documento', 'generacion'],
   ASUNTO_CORREO_OBSERVADO: ['nombre', 'matricula', 'documento', 'generacion'],
   PLANTILLA_CORREO_OBSERVADO: ['nombre', 'matricula', 'documento', 'observacion', 'dictaminador', 'generacion'],
   ASUNTO_CORREO_COMPLETO: ['nombre', 'matricula', 'generacion'],
@@ -118,6 +138,19 @@ const LONGITUD_MAXIMA_CUERPO_CORREO = 3000;
 // Minimo de correos disponibles en la cuota diaria de MailApp para intentar
 // un envio; por debajo se omite y se registra el motivo (RNF-10).
 const CUOTA_MINIMA_CORREOS = 1;
+
+// Recordatorio a alumnos con documentos pendientes. Se reservan correos de
+// la cuota diaria para que los avisos de observado, acuse y completo no se
+// queden sin salir el mismo dia. Lo que no alcance se envia al dia siguiente.
+const RESERVA_CUOTA_RECORDATORIO = 150;
+const TIEMPO_RECORDATORIO_MS = 4 * 60 * 1000;
+const LOTE_HISTORIAL_RECORDATORIO = 50;
+const ESPERA_SIGUIENTE_DIA_MS = 24 * 60 * 60 * 1000;
+const ESPERA_CONTINUAR_RECORDATORIO_MS = 60 * 1000;
+const FUNCION_CONTINUAR_RECORDATORIO = 'continuarRecordatorioPendientes';
+const PROPIEDAD_CAMPANIA_RECORDATORIO = 'UTP_DICTAMEN_CAMPANIA_RECORDATORIO';
+const TIPO_HISTORIAL_CORREO = 'CORREO';
+const ESTATUS_HISTORIAL_RECORDATORIO = 'Recordatorio enviado';
 
 // Prefijos de los identificadores unicos (seccion 6).
 const PREFIJOS_ID = {

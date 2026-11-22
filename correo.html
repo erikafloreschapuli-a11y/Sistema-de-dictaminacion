@@ -51,20 +51,20 @@
             <td style="padding:20px 24px 6px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
                 <tr>
-                  <td style="padding:4px 12px 4px 0;color:#5d6d63;width:150px;white-space:nowrap;">Nombre</td>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;width:34%;vertical-align:top;">Nombre</td>
                   <td style="padding:4px 0;font-weight:bold;"><?= estudiante.nombre ?></td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 12px 4px 0;color:#5d6d63;white-space:nowrap;">Matrícula</td>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;vertical-align:top;">Matrícula</td>
                   <td style="padding:4px 0;font-weight:bold;color:#15803d;font-size:16px;"><?= estudiante.matricula ?></td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 12px 4px 0;color:#5d6d63;white-space:nowrap;">Programa educativo</td>
-                  <td style="padding:4px 0;"><?= estudiante.carrera ?></td>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;vertical-align:top;">Programa educativo</td>
+                  <td style="padding:4px 0;word-break:break-word;"><?= estudiante.carrera ?></td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 12px 4px 0;color:#5d6d63;white-space:nowrap;">Correo</td>
-                  <td style="padding:4px 0;"><?= estudiante.correo ?></td>
+                  <td style="padding:4px 12px 4px 0;color:#5d6d63;vertical-align:top;">Correo</td>
+                  <td style="padding:4px 0;word-break:break-word;"><?= estudiante.correo ?></td>
                 </tr>
               </table>
             </td>
@@ -88,7 +88,7 @@
                   <th align="center" style="padding:10px 12px;border:1px solid #c9d5cd;font-size:13px;width:120px;">Estatus</th>
                 </tr>
                 <? documentos.forEach(function (documento) { ?>
-                  <tr style="background:<?= documento.destacado ? '#fef2f2' : '#ffffff' ?>;">
+                  <tr style="background:<?= documento.fondoFila ?>;">
                     <td style="padding:10px 12px;border:1px solid #c9d5cd;">
                       <strong><?= documento.tipo ?></strong>
                       <? if (documento.observacion) { ?>

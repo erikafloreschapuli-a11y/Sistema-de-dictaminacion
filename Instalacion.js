@@ -62,6 +62,8 @@ function reiniciarDatosDelSistema() {
   });
 
   eliminarActivadoresCarpetas();
+  eliminarActivadoresRecordatorio();
+  PropertiesService.getScriptProperties().deleteProperty(PROPIEDAD_CAMPANIA_RECORDATORIO);
   const carpetaAnterior = enviarCarpetaRaizAPapelera();
   const carpetaNueva = obtenerCarpetaRaizDrive();
   const permisos = sincronizarPermisosCarpeta();
