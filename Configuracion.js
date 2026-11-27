@@ -177,6 +177,11 @@ const NOMBRE_PERSONAL_PARA_ESTUDIANTE = 'Servicios Escolares';
 const DURACION_SESION_SEGUNDOS = 2 * 60 * 60;
 const PREFIJO_CACHE_SESION = 'sesion_';
 
+// Generaciones (ver ServicioGeneraciones.js). El valor "todas" del selector
+// quita el filtro; la longitud es la misma que acepta Configuracion.
+const FILTRO_TODAS_GENERACIONES = 'todas';
+const LONGITUD_MAXIMA_GENERACION = 30;
+
 // Acciones del parametro ?accion= que entiende doGet (inicio y cierre de sesion).
 const ACCIONES_SESION = {
   INGRESAR: 'ingresar',

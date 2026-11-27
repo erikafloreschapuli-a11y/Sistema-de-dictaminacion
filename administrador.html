@@ -17,6 +17,7 @@
     .tarjetas + .panel { margin-top: 18px; }
     .aviso-prueba { margin-bottom: 16px; font-size: 13px; }
     .panel-recordatorio { margin-top: 22px; }
+    .filtro-generacion { max-width: 240px; margin-bottom: 18px; }
     #estado-recordatorio p { color: var(--texto); }
     .progreso-prueba { height: 10px; border-radius: 999px; background: var(--gris-100); overflow: hidden; margin: 10px 0; }
     .progreso-prueba span { display: block; height: 100%; width: 0; background: var(--verde-600); transition: width 0.2s; }
@@ -72,6 +73,9 @@
         <h2 class="seccion-titulo">Reportes generales</h2>
         <p class="seccion-descripcion">Resumen del avance de los expedientes de nuevo ingreso.</p>
       </div>
+      <label class="campo filtro-generacion">Generación
+        <select id="filtro-generacion-reportes"></select>
+      </label>
       <div id="contenedor-reportes">
         <p class="cargando">Cargando reportes...</p>
       </div>
@@ -79,7 +83,7 @@
       <!-- Recordatorio por correo a alumnos con documentos pendientes -->
       <div class="panel panel-recordatorio">
         <h3>Recordatorio a alumnos con documentos pendientes</h3>
-        <p class="panel-descripcion">Envía el correo "Documentos pendientes" a quienes aún no suben todo. Se envían los que permite la cuota diaria de Google; el resto sale solo al día siguiente y nadie lo recibe dos veces en la misma campaña.</p>
+        <p class="panel-descripcion">Envía el correo "Documentos pendientes" a los alumnos de la generación activa que aún no suben todo. Se envían los que permite la cuota diaria de Google; el resto sale solo al día siguiente y nadie lo recibe dos veces en la misma campaña.</p>
         <div id="estado-recordatorio"><p class="cargando">Consultando...</p></div>
         <div class="formulario-acciones">
           <button type="button" class="boton" id="boton-recordatorio"><i data-icono="correo"></i>Enviar recordatorio</button>
@@ -361,7 +365,8 @@
       dictaminadores: [],
       historial: { registros: [], hayMas: false },
       editandoCorreo: '',
-      correoActual: ''
+      correoActual: '',
+      generacionActiva: ''
     };
 
     // Indicadores agrupados: primero alumnos (lo que se pregunta en juntas:
@@ -434,6 +439,7 @@
       document.getElementById('form-plantillas').addEventListener('submit', guardarPlantillas);
       document.getElementById('boton-restaurar-plantillas').addEventListener('click', restaurarPlantillas);
 
+      document.getElementById('filtro-generacion-reportes').addEventListener('change', cargarReportes);
       document.getElementById('boton-recordatorio').addEventListener('click', function () { enviarRecordatorio(false); });
       document.getElementById('boton-recordatorio-nuevo').addEventListener('click', function () { enviarRecordatorio(true); });
 
@@ -488,7 +494,9 @@
       estadoPagina.cargado.reportes = true;
       contenedor.innerHTML = '<p class="cargando">Cargando reportes...</p>';
       try {
-        const respuesta = await api('apiObtenerReportesGenerales');
+        const selectGeneracion = document.getElementById('filtro-generacion-reportes');
+        const respuesta = await api('apiObtenerReportesGenerales', { generacion: leerFiltroGeneracion(selectGeneracion) });
+        renderOpcionesGeneracion(selectGeneracion, respuesta);
         contenedor.innerHTML = GRUPOS_REPORTES.map(function (grupo) {
           return '<h3 class="reporte-grupo">' + grupo.titulo + '</h3>' +
             '<div class="tarjetas">' + grupo.tarjetas.map(function (item) {
@@ -550,10 +558,13 @@
     function mostrarEstadoRecordatorio(estado) {
       const campania = estado.campania;
       const lineas = [];
+      estadoPagina.generacionActiva = estado.generacionActiva || '';
       if (!campania) {
-        lineas.push('No se ha enviado ningún recordatorio. Alumnos con documentos pendientes: <strong>' + estado.faltan + '</strong>.');
+        lineas.push('No se ha enviado ningún recordatorio. Alumnos de la generación <strong>' + escapeHtml(estado.generacion) +
+          '</strong> con documentos pendientes: <strong>' + estado.faltan + '</strong>.');
       } else {
-        lineas.push('Campaña <strong>' + escapeHtml(campania.id) + '</strong> iniciada el ' + escapeHtml(formatearFechaHora(campania.inicio)) + '.');
+        lineas.push('Campaña <strong>' + escapeHtml(campania.id) + '</strong> (generación <strong>' +
+          escapeHtml(estado.generacion || 'todas') + '</strong>) iniciada el ' + escapeHtml(formatearFechaHora(campania.inicio)) + '.');
         lineas.push('Enviados: <strong>' + estado.enviados + '</strong> · Faltan: <strong>' + estado.faltan + '</strong>.');
         if (campania.terminada) {
           lineas.push('La campaña terminó: todos los alumnos con pendientes ya recibieron su recordatorio.');
@@ -570,8 +581,9 @@
     }
 
     async function enviarRecordatorio(nueva) {
+      const generacion = estadoPagina.generacionActiva;
       const mensaje = nueva
-        ? 'Se iniciará una campaña nueva: los alumnos con documentos pendientes recibirán otro recordatorio aunque ya hayan recibido uno antes. ¿Continuar?'
+        ? 'Se iniciará una campaña nueva para la generación ' + generacion + ': los alumnos con documentos pendientes recibirán otro recordatorio aunque ya hayan recibido uno antes. ¿Continuar?'
         : 'Se enviará el correo "Documentos pendientes" a los alumnos que aún no suben todo. ¿Continuar?';
       if (!confirm(mensaje)) {
         return;

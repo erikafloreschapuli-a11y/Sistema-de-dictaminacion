@@ -8,14 +8,17 @@
 
 /**
  * Indicadores por alumno, por documento y por carrera (RF-23).
+ * datos.generacion: sin valor = generacion activa; "todas" = sin filtro.
  */
-function apiObtenerReportesGenerales() {
+function apiObtenerReportesGenerales(datos) {
   return protegerApi(function () {
     asegurarRol([ROLES.ADMINISTRADOR]);
-    const reportes = construirReportesGenerales(leerHoja(HOJAS.ESTUDIANTES), leerHoja(HOJAS.DOCUMENTOS));
+    const estudiantes = leerHoja(HOJAS.ESTUDIANTES);
+    const generacion = resolverFiltroGeneracion(datos && datos.generacion);
+    const reportes = construirReportesGenerales(filtrarPorGeneracion(estudiantes, generacion), leerHoja(HOJAS.DOCUMENTOS));
     // Se muestra para que el Administrador anticipe dias de mucho dictamen (RNF-10).
     reportes.cuotaCorreosRestante = obtenerCuotaCorreosRestante();
-    return { ok: true, reportes: reportes };
+    return Object.assign({ ok: true, reportes: reportes }, construirOpcionesGeneracion(estudiantes, generacion));
   });
 }
 

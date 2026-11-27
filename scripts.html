@@ -127,6 +127,31 @@ function mostrarCuentaCambiada(correoPagina, correoServidor) {
 }
 
 /**
+ * Llena un selector de generacion con la respuesta del servidor
+ * (generaciones, generacionActiva, generacion elegida y el valor de "Todas").
+ * dataset.listo indica que ya hay una eleccion que enviar al servidor.
+ */
+function renderOpcionesGeneracion(select, respuesta) {
+  const valorTodas = respuesta.valorTodasGeneraciones;
+  const opciones = (respuesta.generaciones || []).map(function (generacion) {
+    const etiqueta = generacion === respuesta.generacionActiva ? generacion + ' (activa)' : generacion;
+    return '<option value="' + escapeHtml(generacion) + '">' + escapeHtml(etiqueta) + '</option>';
+  });
+  opciones.push('<option value="' + escapeHtml(valorTodas) + '">Todas</option>');
+  select.innerHTML = opciones.join('');
+  select.value = respuesta.generacion || valorTodas;
+  select.dataset.listo = 'true';
+}
+
+/**
+ * Filtro de generacion para el servidor: sin eleccion todavia, se omite
+ * para que el servidor use la generacion activa.
+ */
+function leerFiltroGeneracion(select) {
+  return select.dataset.listo ? select.value : undefined;
+}
+
+/**
  * La navegacion fuera del iframe exige un clic del usuario, por eso se
  * ofrece un enlace en vez de redirigir automaticamente.
  */

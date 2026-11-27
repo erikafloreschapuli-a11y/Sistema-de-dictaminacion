@@ -387,7 +387,7 @@ function apiGuardarConfiguracion(datos) {
     }
 
     const generacion = String(parametros.GENERACION_ACTIVA || '').trim();
-    if (!generacion || generacion.length > 30 || !/^[A-Za-z0-9\s\-/.]+$/.test(generacion)) {
+    if (!generacion || generacion.length > LONGITUD_MAXIMA_GENERACION || !/^[A-Za-z0-9\s\-/.]+$/.test(generacion)) {
       throw crearError('VALIDACION', 'La generacion activa es obligatoria (maximo 30 caracteres).');
     }
 

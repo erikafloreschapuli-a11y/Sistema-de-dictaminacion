@@ -24,6 +24,8 @@ function apiIniciarRecordatorio(datos) {
     if (!actual || actual.terminada || (datos && datos.nueva)) {
       guardarCampaniaRecordatorio({
         id: 'REC-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmm'),
+        // La campana se queda con su generacion aunque despues cambie la activa.
+        generacion: obtenerGeneracionActiva(),
         iniciadaPor: usuario.correo,
         inicio: new Date().toISOString(),
         terminada: false,
@@ -42,10 +44,13 @@ function apiObtenerEstadoRecordatorio() {
     asegurarRol([ROLES.ADMINISTRADOR]);
     const campania = leerCampaniaRecordatorio();
     const conteo = campania ? contarDestinatariosRecordatorio(campania) : null;
+    const generacionActiva = obtenerGeneracionActiva();
     return {
       ok: true,
       estado: {
         campania: campania,
+        generacion: campania ? obtenerGeneracionCampania(campania) : generacionActiva,
+        generacionActiva: generacionActiva,
         enviados: conteo ? conteo.enviados : 0,
         faltan: conteo ? conteo.faltan : contarAlumnosConPendientes(),
         cuotaRestante: obtenerCuotaCorreosRestante()
@@ -125,17 +130,33 @@ function enviarLoteRecordatorio() {
 }
 
 /**
- * Alumnos reales con al menos un documento Pendiente que aun no recibieron
- * el recordatorio de esta campana.
+ * Generacion a la que va dirigida la campana. Las campanas anteriores a
+ * este campo no tenian generacion y se mandaban a todos (cadena vacia).
+ */
+function obtenerGeneracionCampania(campania) {
+  return String(campania.generacion || '').trim();
+}
+
+/**
+ * Alumnos reales de una generacion (vacia = todas), sin los de la prueba de carga.
+ */
+function leerAlumnosDeGeneracion(generacion) {
+  const reales = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
+    return !esMatriculaDePrueba(estudiante.matricula);
+  });
+  return filtrarPorGeneracion(reales, generacion);
+}
+
+/**
+ * Alumnos reales de la generacion de la campana con al menos un documento
+ * Pendiente que aun no recibieron el recordatorio de esta campana.
  */
 function obtenerDestinatariosRecordatorio(campania) {
   const yaRecordados = {};
   buscarFilasPorValor(HOJAS.HISTORIAL, 'observacion', construirEtiquetaCampania(campania)).forEach(function (fila) {
     yaRecordados[String(fila.matricula).trim().toLowerCase()] = true;
   });
-  const estudiantes = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
-    return !esMatriculaDePrueba(estudiante.matricula);
-  });
+  const estudiantes = leerAlumnosDeGeneracion(obtenerGeneracionCampania(campania));
   const expedientes = construirExpedientes(estudiantes, leerHoja(HOJAS.DOCUMENTOS));
   const pendientes = [];
   let yaEnviados = 0;
@@ -157,10 +178,11 @@ function contarDestinatariosRecordatorio(campania) {
   return { enviados: destinatarios.yaEnviados, faltan: destinatarios.pendientes.length };
 }
 
+/**
+ * Alumnos con pendientes de la generacion activa (antes de la primera campana).
+ */
 function contarAlumnosConPendientes() {
-  const estudiantes = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
-    return !esMatriculaDePrueba(estudiante.matricula);
-  });
+  const estudiantes = leerAlumnosDeGeneracion(obtenerGeneracionActiva());
   return construirExpedientes(estudiantes, leerHoja(HOJAS.DOCUMENTOS)).filter(function (expediente) {
     return expediente.conteos.pendientes > 0;
   }).length;

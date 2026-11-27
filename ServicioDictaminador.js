@@ -12,27 +12,30 @@
 
 /**
  * Devuelve los expedientes visibles para el dictaminador.
- * Filtros: texto (matricula o nombre), carrera y estatus del expediente.
+ * Filtros: generacion (sin valor = la activa), texto (matricula o nombre),
+ * carrera y estatus del expediente.
  */
 function apiObtenerExpedientesDictaminador(datos) {
   return protegerApi(function () {
     asegurarRol([ROLES.DICTAMINADOR]);
     // Los alumnos de la prueba de carga no deben aparecer para dictaminar.
-    const estudiantes = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
+    const todos = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
       return !esMatriculaDePrueba(estudiante.matricula);
     });
-    const documentos = leerHoja(HOJAS.DOCUMENTOS);
     const filtros = datos || {};
+    const generacion = resolverFiltroGeneracion(filtros.generacion);
+    const estudiantes = filtrarPorGeneracion(todos, generacion);
+    const documentos = leerHoja(HOJAS.DOCUMENTOS);
     const expedientes = construirExpedientes(estudiantes, documentos)
       .filter(function (expediente) {
         return coincideFiltrosExpediente(expediente, filtros);
       });
-    return {
+    return Object.assign({
       ok: true,
       total: expedientes.length,
       expedientes: expedientes,
       carreras: obtenerCarrerasRegistradas(estudiantes)
-    };
+    }, construirOpcionesGeneracion(todos, generacion));
   });
 }
 

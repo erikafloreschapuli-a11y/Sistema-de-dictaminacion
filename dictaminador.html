@@ -51,6 +51,9 @@
             <label class="campo">Buscar por matrícula o nombre
               <input type="search" id="filtro-texto" maxlength="120" placeholder="Ej. 20260001 o Ana López">
             </label>
+            <label class="campo">Generación
+              <select id="filtro-generacion"></select>
+            </label>
             <div class="fila-filtros">
               <label class="campo">Carrera
                 <select id="filtro-carrera">
@@ -129,6 +132,11 @@
     document.addEventListener('DOMContentLoaded', function () {
       document.getElementById('form-filtros').addEventListener('submit', function (evento) {
         evento.preventDefault();
+        cargarExpedientes();
+      });
+      document.getElementById('filtro-generacion').addEventListener('change', function () {
+        // Las carreras cambian con la generacion: la elegida podria no existir en la nueva.
+        document.getElementById('filtro-carrera').value = '';
         cargarExpedientes();
       });
       document.getElementById('filtro-carrera').addEventListener('change', function () { cargarExpedientes(); });
@@ -213,6 +221,7 @@
 
     function obtenerFiltros() {
       return {
+        generacion: leerFiltroGeneracion(document.getElementById('filtro-generacion')),
         texto: document.getElementById('filtro-texto').value,
         carrera: document.getElementById('filtro-carrera').value,
         estatus: document.getElementById('filtro-estatus').value
@@ -223,6 +232,8 @@
       document.getElementById('filtro-texto').value = '';
       document.getElementById('filtro-carrera').value = '';
       document.getElementById('filtro-estatus').value = 'En Revision';
+      // Sin eleccion de generacion, el servidor vuelve a la generacion activa.
+      delete document.getElementById('filtro-generacion').dataset.listo;
       cargarExpedientes();
     }
 
@@ -239,6 +250,7 @@
         const respuesta = await api('apiObtenerExpedientesDictaminador', obtenerFiltros());
         estadoPagina.expedientes = respuesta.expedientes || [];
         estadoPagina.carreras = respuesta.carreras || [];
+        renderOpcionesGeneracion(document.getElementById('filtro-generacion'), respuesta);
         renderCarreras();
         renderLista();
       } catch (error) {
