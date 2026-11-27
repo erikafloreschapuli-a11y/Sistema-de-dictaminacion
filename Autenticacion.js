@@ -213,8 +213,27 @@ function asegurarSesionActiva(correo) {
  * URL publica de la app; los enlaces deben ser absolutos porque la vista
  * corre dentro de un iframe de googleusercontent.com.
  */
-function obtenerUrlApp() {
-  return ScriptApp.getService().getUrl();
+function obtenerUrlApp(correo) {
+  const urlBase = ScriptApp.getService().getUrl();
+  return correo ? construirUrlAppParaDominio(urlBase, correo) : urlBase;
+}
+
+/**
+ * getUrl() trae el dominio de quien desplego (@utpuebla.edu.mx). Con varias
+ * cuentas abiertas, Google usa una cuenta de ese dominio y el estudiante
+ * terminaba en la cuenta de admin. Con el dominio del usuario en la URL,
+ * Google conserva su cuenta en cada enlace.
+ */
+function construirUrlAppParaDominio(urlBase, correo) {
+  const correoNormalizado = normalizarCorreo(correo);
+  const dominioPermitido = [DOMINIO_ESTUDIANTE, DOMINIO_TRABAJADORES].filter(function (dominio) {
+    return esCorreoDeDominio(correoNormalizado, dominio);
+  })[0];
+  const partes = String(urlBase || '').match(PATRON_URL_DESPLIEGUE);
+  if (!dominioPermitido || !partes) {
+    return urlBase;
+  }
+  return URL_BASE_APPS_SCRIPT + '/a/macros/' + dominioPermitido.replace('@', '') + '/s/' + partes[1] + '/' + partes[2];
 }
 
 /**
@@ -223,6 +242,26 @@ function obtenerUrlApp() {
  * los inesperados se registran y se enmascaran (RNF-07).
  */
 function protegerApi(callback) {
+  return agregarCorreoSesion(ejecutarApiProtegida(callback));
+}
+
+/**
+ * Con varias cuentas abiertas en el navegador, Google puede cargar la pagina
+ * con una cuenta y ejecutar google.script.run con otra. El navegador compara
+ * este correo con el de la pagina para avisar del cambio de cuenta.
+ */
+function agregarCorreoSesion(respuesta) {
+  if (respuesta && typeof respuesta === 'object') {
+    try {
+      respuesta.correoSesion = normalizarCorreo(Session.getActiveUser().getEmail());
+    } catch (error) {
+      respuesta.correoSesion = '';
+    }
+  }
+  return respuesta;
+}
+
+function ejecutarApiProtegida(callback) {
   try {
     return callback();
   } catch (error) {

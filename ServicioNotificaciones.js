@@ -168,7 +168,7 @@ function construirCorreoHtml(estudiante, cuerpo, generacion, formato) {
     };
     plantilla.parrafos = dividirEnParrafos(cuerpo);
     plantilla.documentos = construirFilasDocumentosCorreo(formato);
-    plantilla.urlApp = obtenerUrlApp();
+    plantilla.urlApp = obtenerUrlApp(estudiante.correo_institucional);
     // "cid:" apunta a la imagen adjunta con inlineImages en enviarCorreoNotificacion.
     plantilla.srcLogo = 'cid:' + ID_LOGO_CORREO;
     plantilla.fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy 'a las' HH:mm");

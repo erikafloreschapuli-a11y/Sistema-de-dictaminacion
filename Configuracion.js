@@ -184,7 +184,11 @@ const ACCIONES_SESION = {
 };
 
 // Pagina de Google para elegir otra cuenta sin cerrar las demas.
-const URL_CAMBIAR_CUENTA_GOOGLE = 'https://accounts.google.com/AccountChooser?continue=';
+// Partes de la URL de la app (id del despliegue y exec/dev) para rearmarla
+// con el dominio de quien entra.
+const URL_BASE_APPS_SCRIPT = 'https://script.google.com';
+const PATRON_URL_DESPLIEGUE = /\/macros\/s\/([^/?#]+)\/(exec|dev)/;
+const URL_CAMBIAR_CUENTA_GOOGLE ='https://accounts.google.com/AccountChooser?continue=';
 
 // Mensajes de Google (en ingles o espanol) que indican saturacion o una
 // falla pasajera de un servicio; se responden como OCUPADO para reintentar.

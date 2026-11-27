@@ -75,8 +75,6 @@
     .aviso-inicio .icono { margin-top: 1px; }
     .aviso-inicio-error { background: var(--rojo-50); color: var(--rojo-700); border: 1px solid #f3b4b4; }
     .aviso-inicio-ok { background: var(--verde-50); color: var(--verde-900); border: 1px solid var(--verde-200); }
-    .dominios { margin: 24px 0 0; padding-top: 18px; border-top: 1px solid var(--borde); font-size: 13px; color: var(--texto-suave); }
-    .dominios p { margin: 0 0 6px; }
 
     @media (max-width: 900px) {
       .inicio { grid-template-columns: 1fr; }
@@ -147,11 +145,6 @@
           </a>
           <a class="enlace-secundario" href="<?= urlCambiarCuenta ?>" target="_top">¿No eres tú? Usar otra cuenta</a>
         <? } ?>
-
-        <div class="dominios">
-          <p><strong>Estudiantes:</strong> cuenta <?= dominioEstudiante ?></p>
-          <p><strong>Personal:</strong> cuenta <?= dominioPersonal ?> registrada por el administrador.</p>
-        </div>
       </div>
     </main>
   </div>

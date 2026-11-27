@@ -102,10 +102,11 @@ function include(nombreArchivo) {
  * Datos comunes de la cabecera de todos los paneles.
  */
 function construirDatosCabecera(usuario) {
-  const urlApp = obtenerUrlApp();
+  const urlApp = obtenerUrlApp(usuario.correo);
   return {
     urlApp: urlApp,
     urlSalir: urlApp + '?accion=' + ACCIONES_SESION.SALIR,
+    urlCambiarCuenta: URL_CAMBIAR_CUENTA_GOOGLE + encodeURIComponent(urlApp),
     iniciales: obtenerIniciales(usuario.nombre || usuario.correo),
     srcLogo: obtenerSrcLogo()
   };
@@ -149,7 +150,7 @@ function construirPagina(nombreVista, usuario) {
  * ofrece cambiar de cuenta, el caso tipico de quien entra con su Gmail.
  */
 function construirPaginaInicio(opciones) {
-  const urlApp = obtenerUrlApp();
+  const urlApp = obtenerUrlApp(opciones.usuario ? opciones.usuario.correo : '');
   const panel = opciones.panel && VISTAS_POR_ROL[opciones.panel.charAt(0).toUpperCase() + opciones.panel.slice(1)]
     ? '&panel=' + encodeURIComponent(opciones.panel)
     : '';
@@ -161,8 +162,6 @@ function construirPaginaInicio(opciones) {
   plantilla.iniciales = usuario ? obtenerIniciales(usuario.nombre || usuario.correo) : '';
   plantilla.urlIngresar = urlApp + '?accion=' + ACCIONES_SESION.INGRESAR + panel;
   plantilla.urlCambiarCuenta = URL_CAMBIAR_CUENTA_GOOGLE + encodeURIComponent(urlApp);
-  plantilla.dominioPersonal = DOMINIO_TRABAJADORES;
-  plantilla.dominioEstudiante = DOMINIO_ESTUDIANTE;
   plantilla.generacion = String(obtenerValorConfiguracionSegura('GENERACION_ACTIVA'));
   plantilla.srcLogo = obtenerSrcLogo();
   return finalizarPagina(plantilla.evaluate(), 'Iniciar sesión - ' + TITULO_APLICACION);

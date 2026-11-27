@@ -6,6 +6,7 @@
 
 const CODIGO_SESION_TERMINADA = 'SESION';
 const CODIGO_SISTEMA_OCUPADO = 'OCUPADO';
+const CODIGO_CUENTA_CAMBIADA = 'CUENTA';
 
 // Reintentos cuando el servidor esta saturado (muchas cargas a la vez).
 // Google admite unas 30 ejecuciones simultaneas por cuenta y todas las de la
@@ -71,6 +72,7 @@ function esperar(milisegundos) {
 
 async function llamarApiUnaVez(nombreFuncion, datos) {
   const respuesta = await llamarServidor(nombreFuncion, datos);
+  verificarCuentaDeRespuesta(respuesta);
   if (!respuesta || respuesta.ok !== true) {
     const error = new Error(respuesta && respuesta.mensaje ? respuesta.mensaje : 'Respuesta inválida del servidor.');
     error.codigo = respuesta && respuesta.codigo;
@@ -81,6 +83,47 @@ async function llamarApiUnaVez(nombreFuncion, datos) {
     throw error;
   }
   return respuesta;
+}
+
+/**
+ * Con varias cuentas de Google abiertas, la pagina puede haberse cargado con
+ * una cuenta y el servidor responder con otra. El servidor ya rechaza lo que
+ * el rol no permite; aqui se bloquea la vista para que nadie trabaje confundido.
+ */
+function verificarCuentaDeRespuesta(respuesta) {
+  const correoPagina = String(document.body.dataset.correo || '').toLowerCase();
+  const correoServidor = String((respuesta && respuesta.correoSesion) || '').toLowerCase();
+  if (!correoPagina || !correoServidor || correoPagina === correoServidor) {
+    return;
+  }
+  mostrarCuentaCambiada(correoPagina, correoServidor);
+  const error = new Error('Tu navegador cambió de cuenta de Google. Recarga la página o elige una sola cuenta.');
+  error.codigo = CODIGO_CUENTA_CAMBIADA;
+  throw error;
+}
+
+function mostrarCuentaCambiada(correoPagina, correoServidor) {
+  if (document.getElementById('bloqueo-cuenta')) {
+    return;
+  }
+  const bloqueo = document.createElement('div');
+  bloqueo.id = 'bloqueo-cuenta';
+  bloqueo.className = 'bloqueo-cuenta';
+  bloqueo.setAttribute('role', 'alertdialog');
+  bloqueo.setAttribute('aria-modal', 'true');
+  bloqueo.innerHTML =
+    '<div class="bloqueo-cuenta-caja">' +
+      '<h2>Se detectaron dos cuentas de Google</h2>' +
+      '<p>Esta página se abrió con <strong>' + escapeHtml(correoPagina) + '</strong>, ' +
+      'pero tu navegador está usando <strong>' + escapeHtml(correoServidor) + '</strong>.</p>' +
+      '<p>Para evitar errores, elige la cuenta con la que quieres trabajar. ' +
+      'Si usas varias cuentas, abre cada una en un perfil de Chrome distinto o en una ventana de incógnito.</p>' +
+      '<div class="bloqueo-cuenta-acciones">' +
+        '<a class="boton" target="_top" href="' + escapeHtml(document.body.dataset.urlCambiarCuenta || '') + '">Elegir cuenta</a>' +
+        '<a class="boton boton-secundario" target="_top" href="' + escapeHtml(document.body.dataset.urlApp || '') + '">Recargar</a>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(bloqueo);
 }
 
 /**
