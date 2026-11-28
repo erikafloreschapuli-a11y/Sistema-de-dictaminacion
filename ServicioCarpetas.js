@@ -1,9 +1,11 @@
 /**
  * ServicioCarpetas.js
  * Estructura de carpetas en Google Drive (RF-32 a RF-34):
- *   Carpeta raiz -> Generacion -> Carrera -> Matricula
- * Las carpetas se crean al importar estudiantes; la carga de archivos solo
- * las busca (y las crea si faltara alguna).
+ *   Carpeta raiz -> Tramite -> Carrera -> Matricula
+ * Cada tramite (nuevo ingreso, titulacion...) tiene su carpeta, asi un
+ * alumno que pasa por varios tiene sus archivos separados por tramite.
+ * Las carpetas se crean al habilitar alumnos en un tramite; la carga de
+ * archivos solo las busca (y las crea si faltara alguna).
  */
 
 /* ------------------------------------------------------------------ */
@@ -59,29 +61,42 @@ function buscarCarpetaActiva(iterador) {
 /* Carpeta de cada estudiante                                          */
 /* ------------------------------------------------------------------ */
 
-function obtenerNombreCarpetaGeneracion(estudiante) {
-  return String(estudiante.generacion || '').trim() || CARPETA_SIN_GENERACION;
+/**
+ * Datos que ubican la carpeta de un alumno en un tramite:
+ * { matricula, carrera, grupo } donde grupo es el nombre del tramite.
+ */
+function construirDatosCarpeta(estudiante, contexto) {
+  return {
+    matricula: String(estudiante.matricula || '').trim(),
+    carrera: contexto.inscripcion.carrera || String(estudiante.carrera || '').trim(),
+    grupo: contexto.proceso.id_proceso === ID_PROCESO_PRUEBA ? NOMBRE_GRUPO_PRUEBA : contexto.proceso.nombre
+  };
 }
 
-function obtenerNombreCarpetaCarrera(estudiante) {
-  return String(estudiante.carrera || '').trim() || CARPETA_SIN_CARRERA;
+function obtenerNombreCarpetaGrupo(datosCarpeta) {
+  return String(datosCarpeta.grupo || '').trim() || CARPETA_SIN_GENERACION;
 }
 
-function obtenerClaveCacheCarpeta(matricula) {
-  return PREFIJO_CACHE_CARPETA + String(matricula).trim().toLowerCase();
+function obtenerNombreCarpetaCarrera(datosCarpeta) {
+  return String(datosCarpeta.carrera || '').trim() || CARPETA_SIN_CARRERA;
+}
+
+function obtenerClaveCacheCarpeta(datosCarpeta) {
+  return PREFIJO_CACHE_CARPETA + obtenerNombreCarpetaGrupo(datosCarpeta).toLowerCase() + '|' +
+    String(datosCarpeta.matricula).trim().toLowerCase();
 }
 
 /**
- * Devuelve la carpeta Generacion -> Carrera -> Matricula del estudiante.
+ * Devuelve la carpeta Tramite -> Carrera -> Matricula del alumno.
  * Primero usa el ID en cache; si no, la busca y solo crea lo que falte.
  */
-function obtenerCarpetaExpediente(estudiante) {
-  const matricula = String(estudiante.matricula || '').trim();
+function obtenerCarpetaExpediente(datosCarpeta) {
+  const matricula = String(datosCarpeta.matricula || '').trim();
   if (!matricula) {
     throw crearError('VALIDACION', 'El estudiante no tiene matrícula registrada.');
   }
   const cache = CacheService.getScriptCache();
-  const claveCache = obtenerClaveCacheCarpeta(matricula);
+  const claveCache = obtenerClaveCacheCarpeta(datosCarpeta);
   const idEnCache = cache.get(claveCache);
   if (idEnCache) {
     try {
@@ -95,8 +110,8 @@ function obtenerCarpetaExpediente(estudiante) {
     cache.remove(claveCache);
   }
 
-  const carpetaGeneracion = obtenerOCrearCarpeta(obtenerCarpetaRaizDrive(), obtenerNombreCarpetaGeneracion(estudiante));
-  const carpetaCarrera = obtenerOCrearCarpeta(carpetaGeneracion, obtenerNombreCarpetaCarrera(estudiante));
+  const carpetaGrupo = obtenerOCrearCarpeta(obtenerCarpetaRaizDrive(), obtenerNombreCarpetaGrupo(datosCarpeta));
+  const carpetaCarrera = obtenerOCrearCarpeta(carpetaGrupo, obtenerNombreCarpetaCarrera(datosCarpeta));
   const carpetaMatricula = obtenerOCrearCarpeta(carpetaCarrera, matricula);
   cache.put(claveCache, carpetaMatricula.getId(), DURACION_CACHE_CARPETA_SEGUNDOS);
   return carpetaMatricula;
@@ -131,21 +146,21 @@ function listarSubcarpetas(carpetaPadre) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Agrupa estudiantes por generacion y carrera:
- * { generacion: { carrera: [matriculas] } }
+ * Agrupa los datos de carpeta por tramite y carrera:
+ * { tramite: { carrera: [matriculas] } }
  */
-function agruparEstudiantesPorCarrera(estudiantes) {
+function agruparEstudiantesPorCarrera(listaCarpetas) {
   const grupos = {};
-  estudiantes.forEach(function (estudiante) {
-    const matricula = String(estudiante.matricula || '').trim();
+  listaCarpetas.forEach(function (datosCarpeta) {
+    const matricula = String(datosCarpeta.matricula || '').trim();
     if (!matricula) {
       return;
     }
-    const generacion = obtenerNombreCarpetaGeneracion(estudiante);
-    const carrera = obtenerNombreCarpetaCarrera(estudiante);
-    grupos[generacion] = grupos[generacion] || {};
-    grupos[generacion][carrera] = grupos[generacion][carrera] || [];
-    grupos[generacion][carrera].push(matricula);
+    const grupo = obtenerNombreCarpetaGrupo(datosCarpeta);
+    const carrera = obtenerNombreCarpetaCarrera(datosCarpeta);
+    grupos[grupo] = grupos[grupo] || {};
+    grupos[grupo][carrera] = grupos[grupo][carrera] || [];
+    grupos[grupo][carrera].push(matricula);
   });
   return grupos;
 }
@@ -155,24 +170,24 @@ function agruparEstudiantesPorCarrera(estudiantes) {
  * plazo indicado. Es idempotente: volver a ejecutarla solo crea lo faltante.
  * Devuelve { creadas, pendientes, carreras }.
  */
-function crearCarpetasDeEstudiantes(estudiantes, plazoMs) {
+function crearCarpetasDeEstudiantes(listaCarpetas, plazoMs) {
   const inicio = Date.now();
-  const grupos = agruparEstudiantesPorCarrera(estudiantes);
+  const grupos = agruparEstudiantesPorCarrera(listaCarpetas);
   const resultado = { creadas: 0, pendientes: 0, carreras: 0 };
   const raiz = obtenerCarpetaRaizDrive();
   const cache = CacheService.getScriptCache();
   let sinTiempo = false;
 
-  Object.keys(grupos).forEach(function (generacion) {
-    const carpetaGeneracion = obtenerOCrearCarpeta(raiz, generacion);
-    Object.keys(grupos[generacion]).forEach(function (carrera) {
-      const matriculas = grupos[generacion][carrera];
+  Object.keys(grupos).forEach(function (grupo) {
+    const carpetaGrupo = obtenerOCrearCarpeta(raiz, grupo);
+    Object.keys(grupos[grupo]).forEach(function (carrera) {
+      const matriculas = grupos[grupo][carrera];
       if (sinTiempo) {
         resultado.pendientes += matriculas.length;
         return;
       }
       resultado.carreras++;
-      const carpetaCarrera = obtenerOCrearCarpeta(carpetaGeneracion, carrera);
+      const carpetaCarrera = obtenerOCrearCarpeta(carpetaGrupo, carrera);
       const existentes = listarSubcarpetas(carpetaCarrera);
       matriculas.forEach(function (matricula) {
         if (existentes[matricula]) {
@@ -185,7 +200,7 @@ function crearCarpetasDeEstudiantes(estudiantes, plazoMs) {
         }
         const carpeta = carpetaCarrera.createFolder(matricula);
         existentes[matricula] = carpeta;
-        cache.put(obtenerClaveCacheCarpeta(matricula), carpeta.getId(), DURACION_CACHE_CARPETA_SEGUNDOS);
+        cache.put(obtenerClaveCacheCarpeta({ matricula: matricula, grupo: grupo }), carpeta.getId(), DURACION_CACHE_CARPETA_SEGUNDOS);
         resultado.creadas++;
       });
     });
@@ -198,9 +213,9 @@ function crearCarpetasDeEstudiantes(estudiantes, plazoMs) {
  * programa un activador que termine el trabajo. Nunca lanza errores: la
  * importacion ya quedo guardada y las carpetas tambien se crean al subir.
  */
-function crearCarpetasConContinuacion(estudiantes, plazoMs) {
+function crearCarpetasConContinuacion(listaCarpetas, plazoMs) {
   try {
-    const resultado = crearCarpetasDeEstudiantes(estudiantes, plazoMs);
+    const resultado = crearCarpetasDeEstudiantes(listaCarpetas, plazoMs);
     if (resultado.pendientes > 0) {
       programarContinuacionCarpetas();
     } else {
@@ -209,16 +224,36 @@ function crearCarpetasConContinuacion(estudiantes, plazoMs) {
     return resultado;
   } catch (error) {
     console.error('No se pudieron crear las carpetas: ' + error.message);
-    return { creadas: 0, pendientes: estudiantes.length, carreras: 0, error: error.message };
+    return { creadas: 0, pendientes: listaCarpetas.length, carreras: 0, error: error.message };
   }
 }
 
 /**
- * Activador de tiempo: retoma la creacion con todos los estudiantes de la
- * hoja. Se reprograma solo mientras queden carpetas pendientes.
+ * Carpetas de todos los alumnos habilitados en todos los tramites.
+ */
+function leerTodasLasCarpetas() {
+  const nombres = {};
+  leerHoja(HOJAS.PROCESOS).forEach(function (fila) {
+    nombres[String(fila.id_proceso || '').trim()] = String(fila.nombre || '').trim();
+  });
+  return leerHoja(HOJAS.ALUMNOS_PROCESO).map(function (fila) {
+    const id = String(fila.id_proceso || '').trim();
+    return {
+      matricula: String(fila.matricula || '').trim(),
+      carrera: String(fila.carrera || '').trim(),
+      grupo: id === ID_PROCESO_PRUEBA ? NOMBRE_GRUPO_PRUEBA : nombres[id]
+    };
+  }).filter(function (datosCarpeta) {
+    return datosCarpeta.grupo;
+  });
+}
+
+/**
+ * Activador de tiempo: retoma la creacion con todos los alumnos habilitados.
+ * Se reprograma solo mientras queden carpetas pendientes.
  */
 function continuarCreacionCarpetas() {
-  const resultado = crearCarpetasConContinuacion(leerHoja(HOJAS.ESTUDIANTES), TIEMPO_CARPETAS_SEGUNDO_PLANO_MS);
+  const resultado = crearCarpetasConContinuacion(leerTodasLasCarpetas(), TIEMPO_CARPETAS_SEGUNDO_PLANO_MS);
   console.log('Carpetas creadas: ' + resultado.creadas + ', pendientes: ' + resultado.pendientes);
 }
 

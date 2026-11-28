@@ -13,16 +13,29 @@ const HOJAS = {
   ESTUDIANTES: 'Estudiantes',
   DOCUMENTOS: 'Documentos',
   HISTORIAL: 'Historial',
-  CONFIGURACION: 'Configuracion'
+  CONFIGURACION: 'Configuracion',
+  PROCESOS: 'Procesos',
+  REQUISITOS_PROCESO: 'RequisitosProceso',
+  ALUMNOS_PROCESO: 'AlumnosProceso'
 };
 
 // Encabezados de cada hoja, en el orden exacto en que se crean (seccion 6).
+// Una columna nueva se agrega al final: instalarSistema() la anexa a la hoja
+// existente sin mover las demas.
 const COLUMNAS_HOJAS = {
   USUARIOS: ['correo', 'nombre', 'rol', 'activo', 'fecha_alta'],
   ESTUDIANTES: ['matricula', 'nombre', 'correo_institucional', 'correo_personal', 'telefono', 'carrera', 'generacion', 'estatus_general'],
-  DOCUMENTOS: ['id_documento', 'matricula', 'tipo_documento', 'url_archivo', 'estatus', 'observaciones', 'fecha_carga', 'fecha_dictamen', 'dictaminador'],
+  // Expediente unico del alumno: cada fila es un archivo y recuerda en que
+  // proceso se subio. Un proceso posterior puede reutilizarlo (ServicioProcesos.js).
+  DOCUMENTOS: ['id_documento', 'matricula', 'tipo_documento', 'url_archivo', 'estatus', 'observaciones', 'fecha_carga', 'fecha_dictamen', 'dictaminador', 'id_proceso', 'fecha_emision'],
   HISTORIAL: ['id_registro', 'fecha_hora', 'usuario', 'matricula', 'tipo_documento', 'estatus_anterior', 'estatus_nuevo', 'observacion'],
-  CONFIGURACION: ['clave', 'valor']
+  CONFIGURACION: ['clave', 'valor'],
+  // Tramites que el Administrador enciende o apaga (nuevo ingreso, titulacion...).
+  PROCESOS: ['id_proceso', 'nombre', 'activo', 'fecha_apertura', 'fecha_cierre', 'fecha_alta'],
+  // Documentos que pide cada proceso y si se pueden reutilizar.
+  REQUISITOS_PROCESO: ['id_proceso', 'tipo_documento', 'regla', 'vigencia_meses', 'orden'],
+  // Alumnos habilitados en cada proceso, con su carrera y generacion de ese tramite.
+  ALUMNOS_PROCESO: ['id_proceso', 'matricula', 'carrera', 'generacion', 'estatus', 'fecha_alta']
 };
 
 // Roles del sistema (seccion 3).
@@ -55,13 +68,63 @@ const ESTATUS_EXPEDIENTE = {
 const DOMINIO_TRABAJADORES = '@utpuebla.edu.mx';
 const DOMINIO_ESTUDIANTE = '@alumno.utpuebla.edu.mx';
 
-// Tipos de documento requeridos para el expediente completo (seccion 1).
-const TIPOS_DOCUMENTO = ['CURP', 'Acta de nacimiento', 'Certificado'];
+// Catalogo de documentos que un proceso puede pedir, con los formatos que
+// acepta cada uno. Los documentos escaneados van en PDF; la fotografia de
+// titulacion en JPG o PNG. Los nombres son los que ve el alumno.
+const CATALOGO_DOCUMENTOS = [
+  { tipo: 'CURP', formatos: ['PDF'] },
+  { tipo: 'Acta de nacimiento', formatos: ['PDF'] },
+  { tipo: 'Certificado', formatos: ['PDF'] },
+  { tipo: 'Fotografía digital', formatos: ['JPG', 'PNG'] },
+  { tipo: 'Identificación oficial', formatos: ['PDF'] },
+  { tipo: 'Comprobante de domicilio', formatos: ['PDF'] },
+  { tipo: 'Título de TSU', formatos: ['PDF'] },
+  { tipo: 'Pago de trámite de titulación', formatos: ['PDF'] },
+  { tipo: 'Pago de expedición de título', formatos: ['PDF'] }
+];
 
-// Formatos de archivo aceptados en la carga (RF-09).
-// CURP, Acta de nacimiento y Certificado se aceptan solo en PDF. Cualquier
-// otro valor en la hoja Configuracion se ignora y el panel no permite guardarlo.
-const FORMATOS_ARCHIVO = ['PDF'];
+// Nombres de todos los documentos del catalogo.
+const TIPOS_DOCUMENTO = CATALOGO_DOCUMENTOS.map(function (documento) {
+  return documento.tipo;
+});
+
+// Documentos del proceso de nuevo ingreso con el que nacio el sistema; la
+// migracion (Instalacion.js) los usa para crear ese primer proceso.
+const TIPOS_DOCUMENTO_NUEVO_INGRESO = ['CURP', 'Acta de nacimiento', 'Certificado'];
+
+// Formatos de archivo que reconoce el sistema (RF-09). Cada documento del
+// catalogo acepta un subconjunto de estos.
+const FORMATOS_ARCHIVO = ['PDF', 'JPG', 'PNG'];
+
+// Reglas de reutilizacion de un requisito (ServicioProcesos.js):
+// NUEVO = siempre se pide; APROBADO = se toma el ultimo aprobado de otro
+// proceso; VIGENTE = se toma solo si su fecha de emision esta dentro de la
+// vigencia en meses, contada desde la apertura del proceso.
+const REGLAS_REUTILIZACION = {
+  NUEVO: 'NUEVO',
+  APROBADO: 'APROBADO',
+  VIGENTE: 'VIGENTE'
+};
+const ETIQUETAS_REGLAS_REUTILIZACION = {
+  NUEVO: 'Pedir siempre uno nuevo',
+  APROBADO: 'Reutilizar si ya está aprobado',
+  VIGENTE: 'Reutilizar si sigue vigente'
+};
+const VIGENCIA_MAXIMA_MESES = 120;
+
+// Origen del documento que usa un alumno en un proceso.
+const ORIGEN_DOCUMENTO = {
+  PROPIO: 'propio',
+  REUTILIZADO: 'reutilizado',
+  NINGUNO: 'ninguno'
+};
+
+// Prefijo y longitud del nombre de un proceso.
+const PREFIJO_ID_PROCESO = 'PRO-';
+const LONGITUD_MAXIMA_NOMBRE_PROCESO = 80;
+
+// Proceso interno de la prueba de carga: no aparece en ningun panel.
+const ID_PROCESO_PRUEBA = 'PRO-PRUEBA-DE-CARGA';
 
 // Rango permitido del tamano maximo de archivo en megabytes (RF-10).
 const RANGO_TAMANIO_ARCHIVO_MB = { MINIMO: 2, MAXIMO: 5 };
@@ -111,7 +174,6 @@ const CLAVES_PLANTILLAS_CORREO = Object.keys(PLANTILLAS_CORREO_PREDETERMINADAS);
 // Claves y valores por defecto de la hoja Configuracion (RF-26 y RF-29).
 const CONFIGURACION_PREDETERMINADA = Object.assign({
   TAMANIO_MAXIMO_ARCHIVO_MB: '5',
-  TIPOS_PERMITIDOS: 'PDF',
   GENERACION_ACTIVA: '2027'
 }, PLANTILLAS_CORREO_PREDETERMINADAS);
 
@@ -150,6 +212,8 @@ const ESPERA_CONTINUAR_RECORDATORIO_MS = 60 * 1000;
 const FUNCION_CONTINUAR_RECORDATORIO = 'continuarRecordatorioPendientes';
 const PROPIEDAD_CAMPANIA_RECORDATORIO = 'UTP_DICTAMEN_CAMPANIA_RECORDATORIO';
 const TIPO_HISTORIAL_CORREO = 'CORREO';
+// Cambios a los tramites (alta, edicion, encendido) en el Historial.
+const TIPO_HISTORIAL_PROCESO = 'PROCESO';
 const ESTATUS_HISTORIAL_RECORDATORIO = 'Recordatorio enviado';
 
 // Prefijos de los identificadores unicos (seccion 6).
@@ -177,9 +241,12 @@ const NOMBRE_PERSONAL_PARA_ESTUDIANTE = 'Servicios Escolares';
 const DURACION_SESION_SEGUNDOS = 2 * 60 * 60;
 const PREFIJO_CACHE_SESION = 'sesion_';
 
-// Generaciones (ver ServicioGeneraciones.js). El valor "todas" del selector
-// quita el filtro; la longitud es la misma que acepta Configuracion.
-const FILTRO_TODAS_GENERACIONES = 'todas';
+// Columnas del CSV para habilitar alumnos en un tramite (RF-25), y las que
+// se pueden actualizar de un alumno que ya existe.
+const COLUMNAS_IMPORTACION_OBLIGATORIAS = ['matricula', 'nombre', 'correo_institucional', 'carrera', 'generacion'];
+const COLUMNAS_ACTUALIZABLES_IMPORTACION = ['nombre', 'correo_institucional', 'correo_personal', 'telefono', 'carrera', 'generacion'];
+
+// Longitud maxima de una generacion (Configuracion y procesos).
 const LONGITUD_MAXIMA_GENERACION = 30;
 
 // Acciones del parametro ?accion= que entiende doGet (inicio y cierre de sesion).
@@ -230,9 +297,9 @@ const NOMBRE_GRUPO_PRUEBA = 'Prueba de carga';
 const MAXIMO_ALUMNOS_PRUEBA = 200;
 const DIGITOS_MATRICULA_PRUEBA = 4;
 
-// Hojas que vacia reiniciarDatosDelSistema (Instalacion.js). Usuarios y
-// Configuracion se conservan.
-const HOJAS_REINICIABLES = [HOJAS.ESTUDIANTES, HOJAS.DOCUMENTOS, HOJAS.HISTORIAL];
+// Hojas que vacia reiniciarDatosDelSistema (Instalacion.js). Usuarios,
+// Configuracion y la definicion de los procesos se conservan.
+const HOJAS_REINICIABLES = [HOJAS.ESTUDIANTES, HOJAS.DOCUMENTOS, HOJAS.HISTORIAL, HOJAS.ALUMNOS_PROCESO];
 const PREFIJO_RESPALDO_LIBRO = 'Respaldo antes de reinicio - ';
 
 // Conversion de unidades para validar el tamano maximo (RF-10).

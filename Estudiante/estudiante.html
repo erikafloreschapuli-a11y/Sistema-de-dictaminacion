@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mi expediente - Dictaminación UTP</title>
+  <title>Mis trámites - Dictaminación UTP</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <style>
@@ -19,7 +19,7 @@
         <img class="marca-logo" src="<?!= cabecera.srcLogo ?>" alt="Escudo de la Universidad Tecnológica de Puebla">
         <div>
           <p class="cabecera-institucion">Universidad Tecnológica de Puebla</p>
-          <h1>Mi expediente de nuevo ingreso</h1>
+          <h1>Mis trámites</h1>
         </div>
       </div>
       <div class="cabecera-usuario">
@@ -43,18 +43,20 @@
 
     <!-- RF-09 a RF-14: carga y seguimiento de documentos -->
     <section id="seccion-documentos" class="seccion">
-      <div class="panel bienvenida">
+      <div class="selector-procesos" id="selector-procesos" hidden></div>
+      <div class="panel bienvenida" id="panel-bienvenida">
         <div>
           <h2 id="saludo">Hola</h2>
+          <p class="bienvenida-proceso" id="texto-proceso"></p>
           <p>Sube cada documento y revisa aquí su estatus. Te avisaremos por correo si alguno necesita corrección.</p>
           <div class="avance">
-            <div class="avance-texto"><span>Avance de tu expediente</span><strong id="avance-texto">0 de 3 aprobados</strong></div>
+            <div class="avance-texto"><span>Avance del trámite</span><strong id="avance-texto">0 aprobados</strong></div>
             <div class="avance-barra"><div class="avance-relleno" id="avance-relleno" style="width:0%"></div></div>
           </div>
         </div>
         <div class="bienvenida-estatus">
           <span id="estatus-general"></span>
-          <small>Estatus del expediente</small>
+          <small>Estatus del trámite</small>
         </div>
       </div>
 
@@ -126,6 +128,9 @@
     // Estado del panel: datos y configuracion vigentes en el servidor.
     const estadoPagina = {
       estudiante: null,
+      procesos: [],
+      expediente: null,
+      idProceso: '',
       documentos: [],
       configuracion: null,
       historialCargado: false,
@@ -161,6 +166,7 @@
     };
 
     const BYTES_POR_MEGABYTE = 1024 * 1024;
+    const ORIGEN_REUTILIZADO = 'reutilizado';
 
     document.addEventListener('DOMContentLoaded', function () {
       document.querySelectorAll('.menu-boton').forEach(function (boton) {
@@ -176,6 +182,13 @@
       contenedor.addEventListener('dragover', manejarArrastre);
       contenedor.addEventListener('dragleave', manejarArrastre);
       contenedor.addEventListener('drop', manejarSoltarArchivo);
+      document.getElementById('selector-procesos').addEventListener('click', function (evento) {
+        const boton = evento.target.closest('button[data-proceso]');
+        if (boton && boton.dataset.proceso !== estadoPagina.idProceso) {
+          estadoPagina.idProceso = boton.dataset.proceso;
+          cargarExpediente();
+        }
+      });
       document.getElementById('boton-cerrar-visor').addEventListener('click', cerrarVisor);
       document.getElementById('modal-visor').addEventListener('click', function (evento) {
         if (evento.target.id === 'modal-visor') {
@@ -231,11 +244,15 @@
       }
       estadoPagina.cargando = true;
       try {
-        const respuesta = await api('apiObtenerMiExpediente');
+        const respuesta = await api('apiObtenerMiExpediente', { idProceso: estadoPagina.idProceso });
         estadoPagina.estudiante = respuesta.estudiante;
-        estadoPagina.documentos = respuesta.documentos;
+        estadoPagina.procesos = respuesta.procesos || [];
+        estadoPagina.expediente = respuesta.expediente;
+        estadoPagina.idProceso = respuesta.expediente ? respuesta.expediente.id_proceso : '';
+        estadoPagina.documentos = respuesta.expediente ? respuesta.expediente.documentos : [];
         estadoPagina.configuracion = respuesta.configuracion;
         renderDatos();
+        renderProcesos();
         renderResumen();
         renderDocumentos();
       } catch (error) {
@@ -270,19 +287,46 @@
         '</div>';
     }
 
+    /**
+     * Una pestana por tramite encendido; solo se muestran si hay mas de uno.
+     */
+    function renderProcesos() {
+      const selector = document.getElementById('selector-procesos');
+      const procesos = estadoPagina.procesos || [];
+      selector.hidden = procesos.length < 2;
+      selector.innerHTML = procesos.map(function (proceso) {
+        const activo = proceso.id_proceso === estadoPagina.idProceso ? ' activo' : '';
+        return '<button type="button" class="proceso-pestana' + activo + '" data-proceso="' + escapeHtml(proceso.id_proceso) + '">' +
+          '<strong>' + escapeHtml(proceso.nombre) + '</strong>' +
+          '<span>' + proceso.aprobados + ' de ' + proceso.total + ' aprobados</span>' +
+          '</button>';
+      }).join('');
+    }
+
     function renderResumen() {
       const estudiante = estadoPagina.estudiante;
-      const documentos = estadoPagina.documentos || [];
-      const aprobados = documentos.filter(function (documento) {
-        return documento.estatus === ESTATUS.APROBADO;
-      }).length;
-      const total = documentos.length || 1;
+      const expediente = estadoPagina.expediente;
       const primerNombre = String(estudiante.nombre || '').split(' ')[0];
-
       document.getElementById('saludo').textContent = primerNombre ? 'Hola, ' + primerNombre : 'Hola';
-      document.getElementById('avance-texto').textContent = aprobados + ' de ' + documentos.length + ' aprobados';
+      document.getElementById('panel-bienvenida').hidden = !expediente;
+      if (!expediente) {
+        return;
+      }
+      const aprobados = expediente.conteos.aprobados;
+      const total = expediente.totalDocumentos || 1;
+      document.getElementById('texto-proceso').textContent = expediente.nombre_proceso + ' · ' + describirPeriodo(expediente);
+      document.getElementById('avance-texto').textContent = aprobados + ' de ' + expediente.totalDocumentos + ' aprobados';
       document.getElementById('avance-relleno').style.width = Math.round((aprobados / total) * 100) + '%';
-      document.getElementById('estatus-general').innerHTML = crearEtiquetaEstatus(estudiante.estatus_general || ESTATUS.PENDIENTE);
+      document.getElementById('estatus-general').innerHTML = crearEtiquetaEstatus(expediente.estatus || ESTATUS.PENDIENTE);
+    }
+
+    function describirPeriodo(expediente) {
+      if (!expediente.abierto) {
+        return 'El periodo de carga está cerrado';
+      }
+      return expediente.fecha_cierre
+        ? 'Puedes subir documentos hasta el ' + formatearFechaSolo(expediente.fecha_cierre)
+        : 'Periodo de carga abierto';
     }
 
     /* ---------------- RF-08: actualizacion de contacto ---------------- */
@@ -314,17 +358,23 @@
     function renderDocumentos() {
       const contenedor = document.getElementById('contenedor-documentos');
       const documentos = estadoPagina.documentos || [];
+      if (!estadoPagina.expediente) {
+        contenedor.innerHTML = '<div class="panel sin-tramites">' + icono('documento') +
+          '<p><strong>No tienes trámites activos por ahora.</strong><br>' +
+          'Cuando Servicios Escolares abra un trámite para ti, aparecerá aquí.</p></div>';
+        return;
+      }
       if (!documentos.length) {
-        contenedor.innerHTML = '<p class="vacio">No hay documentos configurados.</p>';
+        contenedor.innerHTML = '<p class="vacio">Este trámite todavía no tiene documentos configurados.</p>';
         return;
       }
       contenedor.innerHTML = documentos.map(renderDocumento).join('');
     }
 
-    function obtenerTiposPermitidos() {
-      return estadoPagina.configuracion && estadoPagina.configuracion.tiposPermitidos
-        ? estadoPagina.configuracion.tiposPermitidos
-        : ['PDF'];
+    function buscarDocumento(tipoDocumento) {
+      return (estadoPagina.documentos || []).find(function (item) {
+        return item.tipo_documento === tipoDocumento;
+      }) || null;
     }
 
     function obtenerTamanoMaximoMb() {
@@ -345,6 +395,15 @@
         ? '<div class="documento-observacion"><strong>' + icono('alerta') + 'Observación del dictaminador</strong>' +
           escapeHtml(documento.observaciones) + '</div>'
         : '';
+      const reutilizado = documento.origen === ORIGEN_REUTILIZADO
+        ? '<p class="documento-reutilizado">' + icono('carpeta') + 'Tomado de tu expediente: ya lo tenías aprobado, no necesitas subirlo otra vez.</p>'
+        : '';
+      const avisos = [documento.motivo, documento.puedeCargar ? '' : documento.motivoBloqueo].filter(Boolean).map(function (texto) {
+        return '<p class="documento-aviso">' + escapeHtml(texto) + '</p>';
+      }).join('');
+      if (documento.fecha_emision) {
+        fechas.push('Emitido: ' + formatearFechaSolo(documento.fecha_emision));
+      }
       const verArchivo = documento.tieneArchivo
         ? '<button type="button" class="boton boton-mini boton-secundario" data-accion="ver" data-tipo="' + tipo + '">' +
           icono('ojo') + 'Ver archivo</button>'
@@ -356,8 +415,10 @@
           '<h3>' + tipo + '</h3>' +
           crearEtiquetaEstatus(documento.estatus) +
         '</div>' +
-        '<p class="documento-mensaje">' + escapeHtml(MENSAJE_ESTATUS[documento.estatus] || '') + '</p>' +
+        '<p class="documento-mensaje">' + escapeHtml(documento.origen === ORIGEN_REUTILIZADO ? '' : (MENSAJE_ESTATUS[documento.estatus] || '')) + '</p>' +
+        reutilizado +
         observacion +
+        avisos +
         (documento.puedeCargar ? renderZonaCarga(documento) : '') +
         (fechas.length ? '<p class="documento-meta">' + escapeHtml(fechas.join(' · ')) + '</p>' : '') +
         '<div class="documento-acciones">' + verArchivo + '</div>' +
@@ -366,15 +427,22 @@
 
     function renderZonaCarga(documento) {
       const tipo = escapeHtml(documento.tipo_documento);
-      const aceptar = obtenerTiposPermitidos().map(function (formato) {
-        return '.' + String(formato).toLowerCase();
+      const formatos = documento.formatos || ['PDF'];
+      const aceptar = formatos.map(function (formato) {
+        return '.' + String(formato).toLowerCase() + (formato === 'JPG' ? ',.jpeg' : '');
       }).join(',');
       const texto = documento.estatus === ESTATUS.OBSERVADO ? 'Sube el documento corregido' : 'Arrastra tu archivo aquí';
-      return '<label class="zona-carga">' +
+      const fechaEmision = documento.requiereFechaEmision
+        ? '<label class="campo campo-emision">Fecha de emisión del documento' +
+            '<input type="date" class="documento-emision" data-tipo="' + tipo + '">' +
+            '<span class="texto-secundario">Máximo ' + documento.vigenciaMeses + ' meses de antigüedad.</span>' +
+          '</label>'
+        : '';
+      return fechaEmision + '<label class="zona-carga">' +
           '<input type="file" class="documento-archivo" data-tipo="' + tipo + '" accept="' + escapeHtml(aceptar) + '">' +
           icono('subir') +
           '<strong class="zona-titulo">' + texto + '</strong>' +
-          '<span class="zona-detalle">o haz clic para elegirlo · ' + escapeHtml(obtenerTiposPermitidos().join(', ')) +
+          '<span class="zona-detalle">o haz clic para elegirlo · ' + escapeHtml(formatos.join(', ')) +
             ' · máx. ' + obtenerTamanoMaximoMb() + ' MB</span>' +
         '</label>' +
         '<button type="button" class="boton boton-bloque" data-accion="subir" data-tipo="' + tipo + '" disabled>' +
@@ -390,7 +458,7 @@
       if (boton.dataset.accion === 'subir') {
         subirDocumento(boton);
       } else if (boton.dataset.accion === 'ver') {
-        abrirVisor(boton.dataset.tipo);
+        abrirVisor(buscarDocumento(boton.dataset.tipo));
       }
     }
 
@@ -436,7 +504,7 @@
       if (!archivo) {
         return;
       }
-      const errorValidacion = validarArchivoCliente(archivo);
+      const errorValidacion = validarArchivoCliente(archivo, buscarDocumento(entrada.dataset.tipo));
       if (errorValidacion) {
         mostrarAviso(errorValidacion, 'error');
         entrada.value = '';
@@ -461,10 +529,18 @@
       }
 
       const archivo = entrada.files[0];
-      const errorValidacion = validarArchivoCliente(archivo);
+      const documento = buscarDocumento(tipoDocumento);
+      const errorValidacion = validarArchivoCliente(archivo, documento);
       if (errorValidacion) {
         mostrarAviso(errorValidacion, 'error');
         entrada.value = '';
+        return;
+      }
+      const campoEmision = tarjeta.querySelector('.documento-emision');
+      const fechaEmision = campoEmision ? campoEmision.value : '';
+      if (campoEmision && !fechaEmision) {
+        mostrarAviso('Indica la fecha de emisión del documento.', 'error');
+        campoEmision.focus();
         return;
       }
 
@@ -473,7 +549,9 @@
       try {
         const contenidoBase64 = await leerArchivoBase64(archivo);
         await api('apiSubirDocumento', {
+          idProceso: estadoPagina.idProceso,
           tipoDocumento: tipoDocumento,
+          fechaEmision: fechaEmision,
           nombreArchivo: archivo.name,
           tipoMime: archivo.type,
           contenidoBase64: contenidoBase64
@@ -493,8 +571,8 @@
       }
     }
 
-    function validarArchivoCliente(archivo) {
-      const tiposPermitidos = obtenerTiposPermitidos();
+    function validarArchivoCliente(archivo, documento) {
+      const tiposPermitidos = (documento && documento.formatos) || ['PDF'];
       const tamanoMaximoMb = obtenerTamanoMaximoMb();
       const extension = obtenerExtension(archivo.name);
 
@@ -512,7 +590,8 @@
 
     function obtenerExtension(nombreArchivo) {
       const partes = String(nombreArchivo || '').split('.');
-      return partes.length < 2 ? '' : partes.pop().trim().toUpperCase();
+      const extension = partes.length < 2 ? '' : partes.pop().trim().toUpperCase();
+      return extension === 'JPEG' ? 'JPG' : extension;
     }
 
     function leerArchivoBase64(archivo) {
@@ -532,18 +611,15 @@
 
     /* ---------------- Visor del archivo cargado ---------------- */
 
-    function abrirVisor(tipoDocumento) {
-      const documento = (estadoPagina.documentos || []).find(function (item) {
-        return item.tipo_documento === tipoDocumento;
-      });
-      if (!documento) {
+    function abrirVisor(documento) {
+      if (!documento || !documento.id_documento) {
         return;
       }
-      document.getElementById('titulo-visor').textContent = tipoDocumento;
+      document.getElementById('titulo-visor').textContent = documento.tipo_documento;
       document.getElementById('modal-visor').hidden = false;
       mostrarVisor(document.getElementById('contenedor-visor'), {
         matricula: estadoPagina.estudiante.matricula,
-        tipoDocumento: tipoDocumento,
+        idDocumento: documento.id_documento,
         version: documento.fecha_carga
       });
     }

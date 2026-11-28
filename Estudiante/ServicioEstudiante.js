@@ -10,25 +10,63 @@
 /* ------------------------------------------------------------------ */
 
 /**
- * Devuelve el expediente del estudiante de la sesion: datos personales,
- * documentos con su estatus y parametros de configuracion para la vista.
+ * Devuelve los datos del estudiante de la sesion, los tramites encendidos
+ * en los que esta habilitado y el expediente del tramite elegido
+ * (datos.idProceso; sin valor, el primero).
  */
 function apiObtenerMiExpediente(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.ESTUDIANTE]);
     const estudiante = obtenerEstudianteParaUsuario(usuario, datos && datos.matricula);
+    const expedientes = construirExpedientesDelAlumno(estudiante);
+    const pedido = String((datos && datos.idProceso) || '').trim();
+    const elegido = expedientes.find(function (expediente) { return expediente.id_proceso === pedido; }) || expedientes[0] || null;
     return {
       ok: true,
       estudiante: convertirEstudianteParaVista(estudiante),
-      documentos: obtenerDocumentosParaVista(estudiante.matricula),
+      procesos: expedientes.map(convertirResumenProceso),
+      expediente: elegido,
       configuracion: {
-        tamanoMaximoMb: obtenerTamanoMaximoMb(),
-        tiposPermitidos: obtenerTiposPermitidos(),
-        generacionActiva: String(obtenerValorConfiguracion('GENERACION_ACTIVA') || ''),
-        tiposDocumento: TIPOS_DOCUMENTO.slice()
+        tamanoMaximoMb: obtenerTamanoMaximoMb()
       }
     };
   });
+}
+
+/**
+ * Expedientes del alumno en cada tramite encendido donde esta habilitado,
+ * en el orden en que se le habilitaron.
+ */
+function construirExpedientesDelAlumno(estudiante) {
+  const procesos = {};
+  leerProcesos().forEach(function (proceso) {
+    if (proceso.activo) {
+      procesos[proceso.id_proceso] = proceso;
+    }
+  });
+  const requisitos = leerRequisitosPorProceso();
+  const documentos = leerDocumentosDeEstudiante(estudiante.matricula);
+  return leerInscripcionesDeAlumno(estudiante.matricula).filter(function (inscripcion) {
+    return procesos[inscripcion.id_proceso];
+  }).map(function (inscripcion) {
+    const proceso = procesos[inscripcion.id_proceso];
+    const expediente = construirExpedienteProceso(proceso, requisitos[proceso.id_proceso] || [], estudiante, inscripcion, documentos);
+    expediente.fecha_apertura = formatearFechaSolo(proceso.fecha_apertura);
+    expediente.fecha_cierre = formatearFechaSolo(proceso.fecha_cierre);
+    return expediente;
+  });
+}
+
+function convertirResumenProceso(expediente) {
+  return {
+    id_proceso: expediente.id_proceso,
+    nombre: expediente.nombre_proceso,
+    estatus: expediente.estatus,
+    abierto: expediente.abierto,
+    fecha_cierre: expediente.fecha_cierre,
+    aprobados: expediente.conteos.aprobados,
+    total: expediente.totalDocumentos
+  };
 }
 
 /**
@@ -79,7 +117,7 @@ function apiActualizarMisDatos(datos) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Carga o reemplaza un documento del estudiante.
+ * Carga o reemplaza un documento del estudiante en un tramite.
  * Para soportar muchas cargas simultaneas, el archivo se guarda en Drive
  * FUERA del bloqueo; dentro solo se revalida el estatus y se escribe la hoja.
  * Si la revalidacion falla, el archivo recien creado se manda a la papelera.
@@ -87,13 +125,16 @@ function apiActualizarMisDatos(datos) {
 function apiSubirDocumento(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.ESTUDIANTE]);
-    const tipoDocumento = obtenerTipoDocumentoValido(datos && datos.tipoDocumento);
     const estudiante = obtenerEstudianteParaUsuario(usuario, datos && datos.matricula);
-    const resultado = procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos || {});
+    const contexto = obtenerContextoProceso(estudiante.matricula, datos && datos.idProceso, true);
+    if (!estaProcesoAbierto(contexto.proceso)) {
+      throw crearError('VALIDACION', 'El periodo de carga del trámite ' + contexto.proceso.nombre + ' está cerrado.');
+    }
+    const requisito = obtenerRequisito(contexto, datos && datos.tipoDocumento);
+    const resultado = procesarCargaDocumento(usuario, estudiante, contexto, requisito, datos || {});
     // Acuse de recibo despues de guardar: si el correo falla, la carga ya
     // quedo registrada y el alumno ve su estatus en el sistema.
-    const expediente = construirExpedientes([estudiante], leerDocumentosDeEstudiante(estudiante.matricula))[0];
-    resultado.acuseEnviado = notificarDocumentoRecibido(estudiante, expediente, tipoDocumento).enviado;
+    resultado.acuseEnviado = notificarDocumentoRecibido(estudiante, resultado.expediente, requisito.tipo_documento).enviado;
     return resultado;
   });
 }
@@ -102,21 +143,21 @@ function apiSubirDocumento(datos) {
  * Valida, guarda en Drive y registra un documento. La usan la carga real y
  * la prueba de carga (ServicioPruebaCarga.js), para medir el mismo codigo.
  */
-function procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos) {
-  const archivo = prepararArchivoParaCarga(datos);
+function procesarCargaDocumento(usuario, estudiante, contexto, requisito, datos) {
+  const archivo = prepararArchivoParaCarga(datos, obtenerTipoCatalogo(requisito.tipo_documento).formatos);
+  const fechaEmision = validarFechaEmision(requisito, datos.fechaEmision);
 
   // Revision previa sin bloqueo para no subir un archivo que se rechazara.
-  const documentoPrevio = buscarDocumentoDeEstudiante(estudiante.matricula, tipoDocumento);
-  validarEstatusParaCarga(documentoPrevio ? normalizarEstatusDocumento(documentoPrevio.estatus) : ESTATUS_DOCUMENTO.PENDIENTE);
+  validarCargaPermitida(requisito, contexto.proceso, leerDocumentosDeEstudiante(estudiante.matricula));
 
-  const carpeta = obtenerCarpetaExpediente(estudiante);
-  const nombreArchivo = construirNombreArchivo(estudiante.matricula, tipoDocumento, archivo.extension);
+  const carpeta = obtenerCarpetaExpediente(construirDatosCarpeta(estudiante, contexto));
+  const nombreArchivo = construirNombreArchivo(estudiante.matricula, requisito.tipo_documento, archivo.extension);
   const archivoDrive = carpeta.createFile(Utilities.newBlob(archivo.bytes, archivo.mime, nombreArchivo));
 
   let resultado;
   try {
     resultado = conBloqueoEscritura(function () {
-      return registrarCargaDocumento(usuario, estudiante, tipoDocumento, archivoDrive.getUrl());
+      return registrarCargaDocumento(usuario, estudiante, contexto, requisito, archivoDrive.getUrl(), fechaEmision);
     });
   } catch (error) {
     descartarArchivo(archivoDrive);
@@ -133,17 +174,33 @@ function procesarCargaDocumento(usuario, estudiante, tipoDocumento, datos) {
 }
 
 /**
- * Parte critica de la carga (requiere lock): revalida el estatus con datos
- * frescos y escribe Documentos, Historial y estatus_general con una sola
- * lectura de la hoja Documentos.
+ * Un documento reutilizado ya esta aprobado y no se sustituye; uno propio
+ * solo se carga si esta Pendiente u Observado (RF-13 y RF-14).
+ * Devuelve el documento resuelto para el requisito.
  */
-function registrarCargaDocumento(usuario, estudiante, tipoDocumento, urlArchivo) {
+function validarCargaPermitida(requisito, proceso, documentos) {
+  const resuelto = resolverRequisito(requisito, proceso, documentos);
+  if (resuelto.origen === ORIGEN_DOCUMENTO.REUTILIZADO) {
+    throw crearError('VALIDACION', 'Tu ' + requisito.tipo_documento + ' se toma de tu expediente y ya está aprobado; no necesitas subirlo.');
+  }
+  if (resuelto.origen === ORIGEN_DOCUMENTO.PROPIO) {
+    validarEstatusParaCarga(normalizarEstatusDocumento(resuelto.registro.estatus));
+  }
+  return resuelto;
+}
+
+/**
+ * Parte critica de la carga (requiere lock): revalida el estatus con datos
+ * frescos y escribe Documentos, Historial y el estatus del alumno en el
+ * tramite con una sola lectura de sus documentos.
+ */
+function registrarCargaDocumento(usuario, estudiante, contexto, requisito, urlArchivo, fechaEmision) {
   const documentos = leerDocumentosDeEstudiante(estudiante.matricula);
-  const documentoActual = buscarDocumentoEnLista(documentos, estudiante.matricula, tipoDocumento);
+  const resuelto = validarCargaPermitida(requisito, contexto.proceso, documentos);
+  const documentoActual = resuelto.origen === ORIGEN_DOCUMENTO.PROPIO ? resuelto.registro : null;
   const estatusAnterior = documentoActual
     ? normalizarEstatusDocumento(documentoActual.estatus)
     : ESTATUS_DOCUMENTO.PENDIENTE;
-  validarEstatusParaCarga(estatusAnterior);
   // Se toma antes de actualizar el registro, que sobrescribe url_archivo.
   const urlArchivoReemplazado = documentoActual && documentoActual.url_archivo
     ? String(documentoActual.url_archivo)
@@ -155,18 +212,19 @@ function registrarCargaDocumento(usuario, estudiante, tipoDocumento, urlArchivo)
     observaciones: '',
     fecha_carga: new Date(),
     fecha_dictamen: '',
-    dictaminador: ''
+    dictaminador: '',
+    fecha_emision: fechaEmision || ''
   };
 
-  let registro;
   if (documentoActual) {
     actualizarRegistro(HOJAS.DOCUMENTOS, documentoActual._fila, cambios);
-    registro = Object.assign(documentoActual, cambios);
+    Object.assign(documentoActual, cambios);
   } else {
-    registro = Object.assign({
+    const registro = Object.assign({
       id_documento: generarId(PREFIJOS_ID.DOCUMENTO),
       matricula: String(estudiante.matricula),
-      tipo_documento: tipoDocumento
+      tipo_documento: requisito.tipo_documento,
+      id_proceso: contexto.proceso.id_proceso
     }, cambios);
     insertarRegistros(HOJAS.DOCUMENTOS, [registro]);
     documentos.push(registro);
@@ -175,17 +233,17 @@ function registrarCargaDocumento(usuario, estudiante, tipoDocumento, urlArchivo)
   registrarEnHistorial({
     usuario: usuario.correo,
     matricula: String(estudiante.matricula),
-    tipo_documento: tipoDocumento,
+    tipo_documento: requisito.tipo_documento,
     estatus_anterior: estatusAnterior,
     estatus_nuevo: ESTATUS_DOCUMENTO.EN_REVISION,
-    observacion: construirObservacionCarga(estatusAnterior, documentoActual)
+    observacion: construirObservacionCarga(estatusAnterior, documentoActual) + ' (' + contexto.proceso.nombre + ')'
   });
-  actualizarEstatusGeneral(estudiante, documentos);
+  const expediente = actualizarEstatusInscripcion(contexto, estudiante, documentos);
 
   return {
     ok: true,
     mensaje: 'Documento cargado. Queda en revisión por el dictaminador.',
-    documento: convertirDocumento(registro, tipoDocumento),
+    expediente: expediente,
     // Uso interno: procesarCargaDocumento lo manda a la papelera y lo quita.
     urlArchivoReemplazado: urlArchivoReemplazado !== urlArchivo ? urlArchivoReemplazado : ''
   };
@@ -227,7 +285,7 @@ function obtenerEstudiantePorCorreo(correoInstitucional) {
   if (!estudiante) {
     throw crearError(
       'NO_REGISTRADO',
-      'Tu correo institucional no aparece en la lista de estudiantes de nuevo ingreso. Contacta a Servicios Escolares.'
+      'Tu correo institucional no aparece en la lista de estudiantes. Contacta a Servicios Escolares.'
     );
   }
   return estudiante;
@@ -269,48 +327,6 @@ function convertirEstudianteParaVista(estudiante) {
     carrera: String(estudiante.carrera || ''),
     generacion: String(estudiante.generacion || ''),
     estatus_general: String(estudiante.estatus_general || '')
-  };
-}
-
-/**
- * Devuelve los tres documentos requeridos, aunque todavia no exista fila
- * en la hoja Documentos (se muestran como Pendiente).
- */
-function obtenerDocumentosParaVista(matricula) {
-  const matriculaBuscada = String(matricula || '').trim().toLowerCase();
-  const filas = leerDocumentosDeEstudiante(matricula).filter(function (fila) {
-    return String(fila.matricula || '').trim().toLowerCase() === matriculaBuscada;
-  });
-  const porTipo = {};
-  filas.forEach(function (fila) {
-    const clave = String(fila.tipo_documento || '').trim().toLowerCase();
-    if (clave && !porTipo[clave]) {
-      porTipo[clave] = fila;
-    }
-  });
-  return TIPOS_DOCUMENTO.map(function (tipo) {
-    return convertirDocumento(porTipo[tipo.toLowerCase()] || null, tipo);
-  });
-}
-
-/**
- * Convierte una fila de Documentos en datos seguros para la vista.
- */
-function convertirDocumento(registro, tipoDocumento) {
-  const fila = registro || {};
-  const estatus = normalizarEstatusDocumento(fila.estatus);
-  return {
-    id_documento: String(fila.id_documento || ''),
-    tipo_documento: String(fila.tipo_documento || tipoDocumento || ''),
-    // Sin URL de Drive: el estudiante ve su archivo con apiObtenerArchivo.
-    tieneArchivo: Boolean(fila.url_archivo),
-    estatus: estatus,
-    observaciones: String(fila.observaciones === undefined || fila.observaciones === null ? '' : fila.observaciones).trim(),
-    fecha_carga: convertirFechaTexto(fila.fecha_carga),
-    fecha_dictamen: convertirFechaTexto(fila.fecha_dictamen),
-    dictaminador: String(fila.dictaminador || ''),
-    puedeCargar: ESTATUS_CARGA_PERMITIDA.indexOf(estatus) !== -1,
-    motivoBloqueo: obtenerMotivoBloqueo(estatus)
   };
 }
 
@@ -360,34 +376,11 @@ function validarEstatusParaCarga(estatus) {
 }
 
 /**
- * Busca la fila de un documento por matricula y tipo.
- */
-function buscarDocumentoDeEstudiante(matricula, tipoDocumento) {
-  return buscarDocumentoEnLista(leerDocumentosDeEstudiante(matricula), matricula, tipoDocumento);
-}
-
-/**
  * Filas de Documentos de una sola matricula, sin leer la hoja completa
  * (con miles de alumnos la lectura completa alargaba el bloqueo).
  */
 function leerDocumentosDeEstudiante(matricula) {
   return buscarFilasPorValor(HOJAS.DOCUMENTOS, 'matricula', matricula);
-}
-
-/**
- * Igual que buscarDocumentoDeEstudiante pero sobre filas ya leidas.
- */
-function buscarDocumentoEnLista(filas, matricula, tipoDocumento) {
-  const matriculaBuscada = String(matricula || '').trim().toLowerCase();
-  const tipoBuscado = String(tipoDocumento || '').trim().toLowerCase();
-  for (let i = 0; i < filas.length; i++) {
-    const fila = filas[i];
-    if (String(fila.matricula || '').trim().toLowerCase() === matriculaBuscada &&
-        String(fila.tipo_documento || '').trim().toLowerCase() === tipoBuscado) {
-      return fila;
-    }
-  }
-  return null;
 }
 
 /**
@@ -405,12 +398,12 @@ function obtenerTipoDocumentoValido(valor) {
 }
 
 /**
- * Valida extension, contenido, tamano y firma binaria del archivo (RF-09, RF-10).
+ * Valida extension, contenido, tamano y firma binaria del archivo (RF-09,
+ * RF-10). tiposPermitidos son los formatos del documento en el catalogo.
  */
-function prepararArchivoParaCarga(datos) {
+function prepararArchivoParaCarga(datos, tiposPermitidos) {
   const nombreArchivo = String(datos.nombreArchivo || '').trim();
-  const extension = obtenerExtensionArchivo(nombreArchivo);
-  const tiposPermitidos = obtenerTiposPermitidos();
+  const extension = normalizarExtension(obtenerExtensionArchivo(nombreArchivo));
   if (!extension || tiposPermitidos.indexOf(extension) === -1) {
     throw crearError('VALIDACION', 'Formato no permitido. Solo se aceptan: ' + tiposPermitidos.join(', ') + '.');
   }
@@ -462,6 +455,13 @@ function validarFirmaArchivo(extension, bytes) {
 }
 
 /**
+ * JPEG y JPG son el mismo formato; el catalogo usa JPG.
+ */
+function normalizarExtension(extension) {
+  return extension === 'JPEG' ? 'JPG' : extension;
+}
+
+/**
  * Devuelve la extension en mayusculas a partir del nombre del archivo.
  */
 function obtenerExtensionArchivo(nombreArchivo) {
@@ -482,19 +482,6 @@ function obtenerTamanoMaximoMb() {
     return predeterminado;
   }
   return valor;
-}
-
-/**
- * Formatos permitidos vigentes; si la configuracion es invalida usa los de fabrica.
- */
-function obtenerTiposPermitidos() {
-  const texto = String(obtenerValorConfiguracion('TIPOS_PERMITIDOS') || '');
-  const tipos = texto.split(',').map(function (tipo) {
-    return tipo.trim().toUpperCase();
-  }).filter(function (tipo) {
-    return FORMATOS_ARCHIVO.indexOf(tipo) !== -1;
-  });
-  return tipos.length ? tipos : FORMATOS_ARCHIVO.slice();
 }
 
 /**
@@ -546,10 +533,12 @@ function construirNombreArchivo(matricula, tipoDocumento, extension) {
 }
 
 /**
- * Quita acentos, espacios y caracteres no seguros de un nombre de archivo.
+ * Quita acentos, espacios y caracteres no seguros de un nombre de archivo
+ * ("Fotografía digital" -> "Fotografia_digital").
  */
 function limpiarSegmentoNombre(valor) {
   const limpio = String(valor === undefined || valor === null ? '' : valor)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^A-Za-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
   return limpio || 'documento';

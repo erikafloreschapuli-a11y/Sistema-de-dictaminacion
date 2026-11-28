@@ -12,20 +12,26 @@
  *   - Cada envio queda en Historial con la etiqueta de la campana; asi nadie
  *     recibe el mismo recordatorio dos veces y queda evidencia (RF-30).
  * Si el alumno sube sus documentos mientras tanto, ya no se le envia.
+ * Cada campana es de un solo tramite: la reciben sus alumnos habilitados.
  */
 
 /**
- * Inicia una campana nueva (o continua la actual) y envia el primer lote.
+ * Inicia una campana nueva para el tramite datos.idProceso (o continua la
+ * actual) y envia el primer lote.
  */
 function apiIniciarRecordatorio(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.ADMINISTRADOR]);
     const actual = leerCampaniaRecordatorio();
     if (!actual || actual.terminada || (datos && datos.nueva)) {
+      const proceso = obtenerProceso(datos && datos.idProceso);
+      if (!proceso.activo) {
+        throw crearError('VALIDACION', 'Enciende el trámite ' + proceso.nombre + ' antes de enviar recordatorios.');
+      }
       guardarCampaniaRecordatorio({
         id: 'REC-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmm'),
-        // La campana se queda con su generacion aunque despues cambie la activa.
-        generacion: obtenerGeneracionActiva(),
+        idProceso: proceso.id_proceso,
+        nombreProceso: proceso.nombre,
         iniciadaPor: usuario.correo,
         inicio: new Date().toISOString(),
         terminada: false,
@@ -37,22 +43,21 @@ function apiIniciarRecordatorio(datos) {
 }
 
 /**
- * Estado de la campana sin enviar nada (para el panel).
+ * Estado de la campana sin enviar nada (para el panel). Sin campana, cuenta
+ * los alumnos con pendientes del tramite datos.idProceso.
  */
-function apiObtenerEstadoRecordatorio() {
+function apiObtenerEstadoRecordatorio(datos) {
   return protegerApi(function () {
     asegurarRol([ROLES.ADMINISTRADOR]);
     const campania = leerCampaniaRecordatorio();
     const conteo = campania ? contarDestinatariosRecordatorio(campania) : null;
-    const generacionActiva = obtenerGeneracionActiva();
+    const idProceso = String((datos && datos.idProceso) || '').trim();
     return {
       ok: true,
       estado: {
         campania: campania,
-        generacion: campania ? obtenerGeneracionCampania(campania) : generacionActiva,
-        generacionActiva: generacionActiva,
         enviados: conteo ? conteo.enviados : 0,
-        faltan: conteo ? conteo.faltan : contarAlumnosConPendientes(),
+        faltan: conteo ? conteo.faltan : (idProceso ? contarAlumnosConPendientes(idProceso) : 0),
         cuotaRestante: obtenerCuotaCorreosRestante()
       }
     };
@@ -130,45 +135,38 @@ function enviarLoteRecordatorio() {
 }
 
 /**
- * Generacion a la que va dirigida la campana. Las campanas anteriores a
- * este campo no tenian generacion y se mandaban a todos (cadena vacia).
+ * Expedientes de los alumnos habilitados en un tramite. Las campanas
+ * anteriores a los tramites no tienen idProceso: ya terminaron y no
+ * tienen destinatarios.
  */
-function obtenerGeneracionCampania(campania) {
-  return String(campania.generacion || '').trim();
+function leerExpedientesParaRecordatorio(idProceso) {
+  if (!idProceso) {
+    return [];
+  }
+  const proceso = obtenerProceso(idProceso);
+  return construirExpedientesDeProceso(proceso, leerRequisitos(proceso.id_proceso));
 }
 
 /**
- * Alumnos reales de una generacion (vacia = todas), sin los de la prueba de carga.
- */
-function leerAlumnosDeGeneracion(generacion) {
-  const reales = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
-    return !esMatriculaDePrueba(estudiante.matricula);
-  });
-  return filtrarPorGeneracion(reales, generacion);
-}
-
-/**
- * Alumnos reales de la generacion de la campana con al menos un documento
- * Pendiente que aun no recibieron el recordatorio de esta campana.
+ * Alumnos del tramite de la campana con al menos un documento Pendiente
+ * que aun no recibieron el recordatorio de esta campana.
  */
 function obtenerDestinatariosRecordatorio(campania) {
   const yaRecordados = {};
   buscarFilasPorValor(HOJAS.HISTORIAL, 'observacion', construirEtiquetaCampania(campania)).forEach(function (fila) {
     yaRecordados[String(fila.matricula).trim().toLowerCase()] = true;
   });
-  const estudiantes = leerAlumnosDeGeneracion(obtenerGeneracionCampania(campania));
-  const expedientes = construirExpedientes(estudiantes, leerHoja(HOJAS.DOCUMENTOS));
   const pendientes = [];
   let yaEnviados = 0;
-  expedientes.forEach(function (expediente, indice) {
-    if (expediente.conteos.pendientes === 0) {
+  leerExpedientesParaRecordatorio(campania.idProceso).forEach(function (fila) {
+    if (fila.expediente.conteos.pendientes === 0) {
       return;
     }
-    if (yaRecordados[String(expediente.matricula).trim().toLowerCase()]) {
+    if (yaRecordados[String(fila.expediente.matricula).trim().toLowerCase()]) {
       yaEnviados++;
       return;
     }
-    pendientes.push({ estudiante: estudiantes[indice], expediente: expediente });
+    pendientes.push({ estudiante: fila.estudiante, expediente: fila.expediente });
   });
   return { pendientes: pendientes, yaEnviados: yaEnviados };
 }
@@ -179,12 +177,11 @@ function contarDestinatariosRecordatorio(campania) {
 }
 
 /**
- * Alumnos con pendientes de la generacion activa (antes de la primera campana).
+ * Alumnos con pendientes en un tramite (antes de la primera campana).
  */
-function contarAlumnosConPendientes() {
-  const estudiantes = leerAlumnosDeGeneracion(obtenerGeneracionActiva());
-  return construirExpedientes(estudiantes, leerHoja(HOJAS.DOCUMENTOS)).filter(function (expediente) {
-    return expediente.conteos.pendientes > 0;
+function contarAlumnosConPendientes(idProceso) {
+  return leerExpedientesParaRecordatorio(idProceso).filter(function (fila) {
+    return fila.expediente.conteos.pendientes > 0;
   }).length;
 }
 

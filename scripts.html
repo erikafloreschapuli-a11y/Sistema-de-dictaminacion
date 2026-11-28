@@ -127,27 +127,40 @@ function mostrarCuentaCambiada(correoPagina, correoServidor) {
 }
 
 /**
- * Llena un selector de generacion con la respuesta del servidor
- * (generaciones, generacionActiva, generacion elegida y el valor de "Todas").
+ * "aaaa-mm-dd" (fecha sin hora) como texto legible, sin recorrer el dia por
+ * la zona horaria.
+ */
+function formatearFechaSolo(valor) {
+  const partes = String(valor || '').split('-');
+  if (partes.length !== 3) {
+    return String(valor || '');
+  }
+  const fecha = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]));
+  return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Llena un selector de tramite con la respuesta del servidor
+ * (procesos [{ id_proceso, nombre, activo }] e idProceso elegido).
  * dataset.listo indica que ya hay una eleccion que enviar al servidor.
  */
-function renderOpcionesGeneracion(select, respuesta) {
-  const valorTodas = respuesta.valorTodasGeneraciones;
-  const opciones = (respuesta.generaciones || []).map(function (generacion) {
-    const etiqueta = generacion === respuesta.generacionActiva ? generacion + ' (activa)' : generacion;
-    return '<option value="' + escapeHtml(generacion) + '">' + escapeHtml(etiqueta) + '</option>';
-  });
-  opciones.push('<option value="' + escapeHtml(valorTodas) + '">Todas</option>');
-  select.innerHTML = opciones.join('');
-  select.value = respuesta.generacion || valorTodas;
+function renderOpcionesProceso(select, respuesta) {
+  const procesos = respuesta.procesos || [];
+  select.innerHTML = procesos.length
+    ? procesos.map(function (proceso) {
+        const etiqueta = proceso.nombre + (proceso.activo ? '' : ' (apagado)');
+        return '<option value="' + escapeHtml(proceso.id_proceso) + '">' + escapeHtml(etiqueta) + '</option>';
+      }).join('')
+    : '<option value="">Sin trámites</option>';
+  select.value = respuesta.idProceso || '';
   select.dataset.listo = 'true';
 }
 
 /**
- * Filtro de generacion para el servidor: sin eleccion todavia, se omite
- * para que el servidor use la generacion activa.
+ * Tramite elegido para el servidor: sin eleccion todavia se omite para que
+ * el servidor use el primero encendido.
  */
-function leerFiltroGeneracion(select) {
+function leerFiltroProceso(select) {
   return select.dataset.listo ? select.value : undefined;
 }
 
@@ -271,7 +284,12 @@ function crearEtiquetaEstatus(estatus) {
 
 /* ---------------- Linea de tiempo del historial ---------------- */
 
-const TIPOS_DOCUMENTO_HISTORIAL = ['CURP', 'Acta de nacimiento', 'Certificado'];
+// Registros administrativos del historial; cualquier otro tipo es un documento.
+const TIPOS_HISTORIAL_ADMINISTRATIVOS = ['CORREO', 'DATOS', 'IMPORTACION', 'CONFIGURACION', 'USUARIO', 'PROCESO'];
+
+function esEventoDeDocumento(registro) {
+  return TIPOS_HISTORIAL_ADMINISTRATIVOS.indexOf(registro.tipo_documento) === -1;
+}
 
 /**
  * Frase legible para un registro: "Se cargó CURP", "CURP aprobado"...
@@ -281,7 +299,7 @@ function describirEventoHistorial(registro) {
   if (documento === 'CORREO') {
     return 'Se envió un recordatorio por correo';
   }
-  if (TIPOS_DOCUMENTO_HISTORIAL.indexOf(documento) === -1) {
+  if (!esEventoDeDocumento(registro)) {
     return documento + ': ' + registro.estatus_anterior + ' → ' + registro.estatus_nuevo;
   }
   if (registro.estatus_nuevo === 'En Revision') {
@@ -315,7 +333,7 @@ function renderLineaTiempo(registros, opciones) {
       meta.push((registro.nombre_estudiante ? registro.nombre_estudiante + ' · ' : '') + registro.matricula);
     }
     // Solo se muestra el texto cuando aporta: motivo de observacion o cambios administrativos.
-    const esDocumento = TIPOS_DOCUMENTO_HISTORIAL.indexOf(registro.tipo_documento) !== -1;
+    const esDocumento = esEventoDeDocumento(registro);
     const detalle = registro.observacion && (!esDocumento || registro.estatus_nuevo === 'Observado')
       ? '<p class="evento-detalle">' + escapeHtml(registro.observacion) + '</p>'
       : '';

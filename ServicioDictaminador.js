@@ -1,7 +1,8 @@
 /**
  * ServicioDictaminador.js
- * Panel del Dictaminador: consulta de expedientes (RF-15 a RF-17),
- * aprobacion u observacion de documentos (RF-18 a RF-21) y notificaciones
+ * Panel del Dictaminador: consulta de expedientes por tramite (RF-15 a
+ * RF-17), aprobacion u observacion de documentos (RF-18 a RF-21),
+ * solicitud de actualizacion de un documento reutilizado y notificaciones
  * al estudiante (RF-27 y RF-28).
  * Toda escritura en Sheets ocurre dentro de conBloqueoEscritura (RNF-03).
  */
@@ -11,51 +12,58 @@
 /* ------------------------------------------------------------------ */
 
 /**
- * Devuelve los expedientes visibles para el dictaminador.
- * Filtros: generacion (sin valor = la activa), texto (matricula o nombre),
- * carrera y estatus del expediente.
+ * Devuelve los expedientes de un tramite visibles para el dictaminador.
+ * Filtros: idProceso (sin valor = el primero encendido), texto (matricula
+ * o nombre), carrera y estatus del expediente.
  */
 function apiObtenerExpedientesDictaminador(datos) {
   return protegerApi(function () {
     asegurarRol([ROLES.DICTAMINADOR]);
-    // Los alumnos de la prueba de carga no deben aparecer para dictaminar.
-    const todos = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
-      return !esMatriculaDePrueba(estudiante.matricula);
-    });
     const filtros = datos || {};
-    const generacion = resolverFiltroGeneracion(filtros.generacion);
-    const estudiantes = filtrarPorGeneracion(todos, generacion);
-    const documentos = leerHoja(HOJAS.DOCUMENTOS);
-    const expedientes = construirExpedientes(estudiantes, documentos)
-      .filter(function (expediente) {
-        return coincideFiltrosExpediente(expediente, filtros);
-      });
+    const procesos = leerProcesos();
+    const proceso = resolverProcesoElegido(filtros.idProceso, procesos);
+    const opciones = construirOpcionesProceso(procesos, proceso);
+    if (!proceso) {
+      return Object.assign({ ok: true, total: 0, expedientes: [], carreras: [] }, opciones);
+    }
+    const filas = construirExpedientesDeProceso(proceso, leerRequisitos(proceso.id_proceso));
+    const expedientes = filas.map(function (fila) { return fila.expediente; });
+    const filtrados = expedientes.filter(function (expediente) {
+      return coincideFiltrosExpediente(expediente, filtros);
+    });
     return Object.assign({
       ok: true,
-      total: expedientes.length,
-      expedientes: expedientes,
-      carreras: obtenerCarrerasRegistradas(estudiantes)
-    }, construirOpcionesGeneracion(todos, generacion));
+      total: filtrados.length,
+      expedientes: filtrados,
+      carreras: obtenerCarrerasRegistradas(expedientes)
+    }, opciones);
   });
 }
 
 /**
- * Devuelve un expediente completo por matricula (RF-17).
+ * Devuelve el expediente de un alumno en un tramite (RF-17).
  */
 function apiObtenerExpedienteDictaminador(datos) {
   return protegerApi(function () {
     asegurarRol([ROLES.DICTAMINADOR]);
-    const matricula = String((datos && datos.matricula) || '').trim();
-    if (!matricula) {
-      throw crearError('VALIDACION', 'Debes indicar la matricula del expediente.');
-    }
-    const estudiante = buscarPorClave(HOJAS.ESTUDIANTES, 'matricula', matricula);
-    if (!estudiante) {
-      throw crearError('NO_REGISTRADO', 'No existe un estudiante con la matricula ' + matricula + '.');
-    }
-    const expediente = construirExpedientes([estudiante], leerDocumentosDeEstudiante(estudiante.matricula))[0];
+    const estudiante = obtenerEstudianteObligatorio(datos && datos.matricula);
+    const contexto = obtenerContextoProceso(estudiante.matricula, datos && datos.idProceso, false);
+    const expediente = construirExpedienteProceso(contexto.proceso, contexto.requisitos, estudiante, contexto.inscripcion,
+      leerDocumentosDeEstudiante(estudiante.matricula));
     return { ok: true, expediente: expediente };
   });
+}
+
+function obtenerEstudianteObligatorio(matriculaRecibida) {
+  const matricula = String(matriculaRecibida || '').trim();
+  if (!matricula) {
+    throw crearError('VALIDACION', 'Debes indicar la matricula del expediente.');
+  }
+  const estudiante = buscarPorClave(HOJAS.ESTUDIANTES, 'matricula', matricula);
+  if (!estudiante) {
+    throw crearError('NO_REGISTRADO', 'No existe un estudiante con la matricula ' + matricula + '.');
+  }
+  return estudiante;
 }
 
 /* ------------------------------------------------------------------ */
@@ -63,51 +71,41 @@ function apiObtenerExpedienteDictaminador(datos) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Aprueba u observa un documento. Valida el estatus y la version que el
- * dictaminador tenia a la vista para evitar sobrescrituras (RF-21).
+ * Aprueba u observa un documento que el alumno subio en el tramite. Valida
+ * el estatus y la version que el dictaminador tenia a la vista para evitar
+ * sobrescrituras (RF-21).
  */
 function apiDictaminarDocumento(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.DICTAMINADOR]);
-    const matricula = String((datos && datos.matricula) || '').trim();
-    const tipoDocumento = obtenerTipoDocumentoValido(datos && datos.tipoDocumento);
     const estatusNuevo = normalizarEstatusDocumento(datos && datos.estatusNuevo);
     const observacion = String((datos && datos.observacion) || '').trim();
     const estatusEsperado = String((datos && datos.estatusEsperado) || '').trim();
     const fechaCargaEsperada = String((datos && datos.fechaCargaEsperada) || '').trim();
 
-    if (!matricula) {
-      throw crearError('VALIDACION', 'Debes indicar la matricula del expediente.');
-    }
     if (ESTATUS_DICTAMEN_PERMITIDOS.indexOf(estatusNuevo) === -1) {
       throw crearError('VALIDACION', 'El dictamen debe ser Aprobado u Observado.');
     }
-    if (observacion.length > LONGITUD_MAXIMA_OBSERVACION) {
-      throw crearError('VALIDACION', 'La observacion no puede superar ' + LONGITUD_MAXIMA_OBSERVACION + ' caracteres.');
-    }
-    if (estatusNuevo === ESTATUS_DOCUMENTO.OBSERVADO && !observacion) {
-      throw crearError('VALIDACION', 'La observacion es obligatoria cuando el documento se marca como Observado.');
-    }
+    validarObservacion(observacion, estatusNuevo === ESTATUS_DOCUMENTO.OBSERVADO);
 
     const resultado = conBloqueoEscritura(function () {
-      const estudiante = buscarPorClave(HOJAS.ESTUDIANTES, 'matricula', matricula);
-      if (!estudiante) {
-        throw crearError('NO_REGISTRADO', 'No existe un estudiante con la matricula ' + matricula + '.');
+      const estudiante = obtenerEstudianteObligatorio(datos && datos.matricula);
+      const contexto = obtenerContextoProceso(estudiante.matricula, datos && datos.idProceso, false);
+      const requisito = obtenerRequisito(contexto, datos && datos.tipoDocumento);
+      const documentos = leerDocumentosDeEstudiante(estudiante.matricula);
+      const resuelto = resolverRequisito(requisito, contexto.proceso, documentos);
+      if (resuelto.origen !== ORIGEN_DOCUMENTO.PROPIO) {
+        throw crearError('CONFLICTO', 'El alumno no ha cargado ' + requisito.tipo_documento + ' en este trámite. Actualiza el expediente.');
       }
-      const documento = buscarDocumentoDeEstudiante(matricula, tipoDocumento);
-      if (!documento) {
-        throw crearError('VALIDACION', 'El estudiante no tiene cargado el documento ' + tipoDocumento + '.');
-      }
-
+      const documento = resuelto.registro;
       const estatusActual = normalizarEstatusDocumento(documento.estatus);
-      const fechaCargaActual = convertirFechaTexto(documento.fecha_carga);
       if (estatusActual !== ESTATUS_DOCUMENTO.EN_REVISION) {
         throw crearError('CONFLICTO', 'El documento ya no esta en revision. Actualiza el expediente.');
       }
       if (estatusEsperado && estatusActual !== normalizarEstatusDocumento(estatusEsperado)) {
         throw crearError('CONFLICTO', 'Otro dictaminador modifico el documento. Actualiza el expediente.');
       }
-      if (fechaCargaEsperada && fechaCargaActual !== fechaCargaEsperada) {
+      if (fechaCargaEsperada && convertirFechaTexto(documento.fecha_carga) !== fechaCargaEsperada) {
         throw crearError('CONFLICTO', 'El estudiante reemplazo el documento. Actualiza el expediente.');
       }
 
@@ -118,29 +116,29 @@ function apiDictaminarDocumento(datos) {
         dictaminador: usuario.correo
       };
       actualizarRegistro(HOJAS.DOCUMENTOS, documento._fila, cambios);
-      const documentoActualizado = Object.assign({}, documento, cambios);
+      Object.assign(documento, cambios);
 
       registrarEnHistorial({
         usuario: usuario.correo,
         matricula: String(estudiante.matricula),
-        tipo_documento: tipoDocumento,
+        tipo_documento: requisito.tipo_documento,
         estatus_anterior: estatusActual,
         estatus_nuevo: estatusNuevo,
-        observacion: observacion || (estatusNuevo === ESTATUS_DOCUMENTO.APROBADO ? 'Documento aprobado' : '')
+        observacion: (observacion || (estatusNuevo === ESTATUS_DOCUMENTO.APROBADO ? 'Documento aprobado' : '')) +
+          ' (' + contexto.proceso.nombre + ')'
       });
 
-      const expediente = actualizarEstatusGeneral(estudiante);
       return {
         estudiante: estudiante,
-        documento: documentoActualizado,
-        expediente: expediente
+        tipoDocumento: requisito.tipo_documento,
+        expediente: actualizarEstatusInscripcion(contexto, estudiante, documentos)
       };
     });
 
     const expedienteCompleto = resultado.expediente.estatus === ESTATUS_EXPEDIENTE.COMPLETO;
     let notificacion = null;
     if (estatusNuevo === ESTATUS_DOCUMENTO.OBSERVADO) {
-      notificacion = notificarDocumentoObservado(resultado.estudiante, resultado.expediente, tipoDocumento, observacion, usuario);
+      notificacion = notificarDocumentoObservado(resultado.estudiante, resultado.expediente, resultado.tipoDocumento, observacion, usuario);
     } else if (expedienteCompleto) {
       notificacion = notificarExpedienteCompleto(resultado.estudiante, resultado.expediente);
     }
@@ -149,14 +147,82 @@ function apiDictaminarDocumento(datos) {
       ok: true,
       mensaje: construirMensajeDictamen(estatusNuevo, expedienteCompleto, notificacion),
       notificado: Boolean(notificacion && notificacion.enviado),
-      documento: convertirDocumentoDictamen(resultado.documento, tipoDocumento),
       expediente: resultado.expediente
     };
   });
 }
 
+/**
+ * Pide al alumno que vuelva a subir un documento que el tramite tomo de su
+ * expediente (por ejemplo, un acta poco legible para titulacion). Se crea
+ * en este tramite un registro Observado sin archivo: el alumno ve la
+ * observacion y la carga se le abre solo para ese documento.
+ */
+function apiSolicitarActualizacionDocumento(datos) {
+  return protegerApi(function () {
+    const usuario = asegurarRol([ROLES.DICTAMINADOR]);
+    const observacion = String((datos && datos.observacion) || '').trim();
+    validarObservacion(observacion, true);
+
+    const resultado = conBloqueoEscritura(function () {
+      const estudiante = obtenerEstudianteObligatorio(datos && datos.matricula);
+      const contexto = obtenerContextoProceso(estudiante.matricula, datos && datos.idProceso, false);
+      const requisito = obtenerRequisito(contexto, datos && datos.tipoDocumento);
+      const documentos = leerDocumentosDeEstudiante(estudiante.matricula);
+      if (resolverRequisito(requisito, contexto.proceso, documentos).origen !== ORIGEN_DOCUMENTO.REUTILIZADO) {
+        throw crearError('CONFLICTO', 'Este documento ya no se toma del expediente del alumno. Actualiza el expediente.');
+      }
+      const registro = {
+        id_documento: generarId(PREFIJOS_ID.DOCUMENTO),
+        matricula: String(estudiante.matricula),
+        tipo_documento: requisito.tipo_documento,
+        url_archivo: '',
+        estatus: ESTATUS_DOCUMENTO.OBSERVADO,
+        observaciones: observacion,
+        fecha_carga: '',
+        fecha_dictamen: new Date(),
+        dictaminador: usuario.correo,
+        id_proceso: contexto.proceso.id_proceso,
+        fecha_emision: ''
+      };
+      insertarRegistros(HOJAS.DOCUMENTOS, [registro]);
+      documentos.push(registro);
+      registrarEnHistorial({
+        usuario: usuario.correo,
+        matricula: String(estudiante.matricula),
+        tipo_documento: requisito.tipo_documento,
+        estatus_anterior: ESTATUS_DOCUMENTO.APROBADO,
+        estatus_nuevo: ESTATUS_DOCUMENTO.OBSERVADO,
+        observacion: 'Se pidió actualizar el documento del expediente: ' + observacion + ' (' + contexto.proceso.nombre + ')'
+      });
+      return {
+        estudiante: estudiante,
+        tipoDocumento: requisito.tipo_documento,
+        expediente: actualizarEstatusInscripcion(contexto, estudiante, documentos)
+      };
+    });
+
+    const notificacion = notificarDocumentoObservado(resultado.estudiante, resultado.expediente, resultado.tipoDocumento, observacion, usuario);
+    return {
+      ok: true,
+      mensaje: construirMensajeDictamen(ESTATUS_DOCUMENTO.OBSERVADO, false, notificacion),
+      notificado: notificacion.enviado,
+      expediente: resultado.expediente
+    };
+  });
+}
+
+function validarObservacion(observacion, obligatoria) {
+  if (observacion.length > LONGITUD_MAXIMA_OBSERVACION) {
+    throw crearError('VALIDACION', 'La observacion no puede superar ' + LONGITUD_MAXIMA_OBSERVACION + ' caracteres.');
+  }
+  if (obligatoria && !observacion) {
+    throw crearError('VALIDACION', 'La observacion es obligatoria cuando el documento se marca como Observado.');
+  }
+}
+
 /* ------------------------------------------------------------------ */
-/* Construccion de expedientes para la vista                          */
+/* Mensajes y filtros                                                  */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -174,128 +240,6 @@ function construirMensajeDictamen(estatusNuevo, expedienteCompleto, notificacion
   return motivo
     ? 'Documento aprobado. El expediente quedó completo.' + motivo
     : 'Documento aprobado. El expediente quedó completo y se notificó al estudiante.';
-}
-
-/**
- * Recalcula el estatus del expediente y lo guarda en la columna
- * estatus_general, para que la hoja Estudiantes refleje el avance sin abrir
- * la app. Requiere lock activo: se llama despues de cada carga o dictamen.
- */
-function actualizarEstatusGeneral(estudiante, documentosLeidos) {
-  const documentos = documentosLeidos || leerDocumentosDeEstudiante(estudiante.matricula);
-  const expediente = construirExpedientes([estudiante], documentos)[0];
-  if (String(estudiante.estatus_general || '') !== expediente.estatus) {
-    actualizarRegistro(HOJAS.ESTUDIANTES, estudiante._fila, { estatus_general: expediente.estatus });
-  }
-  return expediente;
-}
-
-/**
- * Recalcula estatus_general de todos los estudiantes en una sola escritura.
- * Se ejecuta a mano desde el editor de Apps Script para corregir datos
- * importados antes de que existiera el calculo automatico.
- */
-function recalcularEstatusGenerales() {
-  return conBloqueoEscritura(function () {
-    const estudiantes = leerHoja(HOJAS.ESTUDIANTES);
-    const expedientes = construirExpedientes(estudiantes, leerHoja(HOJAS.DOCUMENTOS));
-    const estatus = expedientes.map(function (expediente) {
-      return expediente.estatus;
-    });
-    escribirColumna(HOJAS.ESTUDIANTES, 'estatus_general', estatus);
-    console.log('estatus_general recalculado para ' + estatus.length + ' estudiantes.');
-    return { ok: true, actualizados: estatus.length };
-  });
-}
-
-/**
- * Agrupa estudiantes y documentos en la estructura que consume el panel.
- */
-function construirExpedientes(estudiantes, documentos) {
-  const ultimos = obtenerUltimaVersionPorTipo(documentos);
-  const documentosPorMatricula = {};
-  Object.keys(ultimos).forEach(function (clave) {
-    const documento = ultimos[clave];
-    const matricula = String(documento.matricula || '').trim().toLowerCase();
-    if (!documentosPorMatricula[matricula]) {
-      documentosPorMatricula[matricula] = [];
-    }
-    documentosPorMatricula[matricula].push(documento);
-  });
-
-  return estudiantes.map(function (estudiante) {
-    const matricula = String(estudiante.matricula || '').trim();
-    return construirExpedienteParaVista(estudiante, documentosPorMatricula[matricula.toLowerCase()] || []);
-  });
-}
-
-/**
- * Calcula conteos y estatus general de un expediente.
- */
-function construirExpedienteParaVista(estudiante, documentos) {
-  const porTipo = {};
-  documentos.forEach(function (documento) {
-    porTipo[String(documento.tipo_documento || '').trim().toLowerCase()] = documento;
-  });
-
-  const documentosVista = TIPOS_DOCUMENTO.map(function (tipo) {
-    return convertirDocumentoDictamen(porTipo[tipo.toLowerCase()] || null, tipo);
-  });
-
-  const conteos = {
-    pendientes: 0,
-    enRevision: 0,
-    aprobados: 0,
-    observados: 0
-  };
-  documentosVista.forEach(function (documento) {
-    if (documento.estatus === ESTATUS_DOCUMENTO.PENDIENTE) conteos.pendientes++;
-    if (documento.estatus === ESTATUS_DOCUMENTO.EN_REVISION) conteos.enRevision++;
-    if (documento.estatus === ESTATUS_DOCUMENTO.APROBADO) conteos.aprobados++;
-    if (documento.estatus === ESTATUS_DOCUMENTO.OBSERVADO) conteos.observados++;
-  });
-
-  let estatus = ESTATUS_EXPEDIENTE.PENDIENTE;
-  if (conteos.observados > 0) {
-    estatus = ESTATUS_EXPEDIENTE.OBSERVADO;
-  } else if (conteos.enRevision > 0) {
-    estatus = ESTATUS_EXPEDIENTE.EN_REVISION;
-  } else if (conteos.aprobados === documentosVista.length) {
-    estatus = ESTATUS_EXPEDIENTE.COMPLETO;
-  }
-
-  return {
-    matricula: String(estudiante.matricula || ''),
-    nombre: String(estudiante.nombre || ''),
-    correo_institucional: String(estudiante.correo_institucional || ''),
-    carrera: String(estudiante.carrera || ''),
-    generacion: String(estudiante.generacion || ''),
-    estatus: estatus,
-    conteos: conteos,
-    totalDocumentos: documentosVista.length,
-    documentos: documentosVista
-  };
-}
-
-/**
- * Convierte una fila de Documentos en datos seguros para el panel.
- */
-function convertirDocumentoDictamen(registro, tipoDocumento) {
-  const fila = registro || {};
-  const estatus = normalizarEstatusDocumento(fila.estatus);
-  // La URL de Drive no viaja al navegador: el visor pide el archivo a apiObtenerArchivo.
-  const urlArchivo = String(fila.url_archivo || '');
-  return {
-    id_documento: String(fila.id_documento || ''),
-    tipo_documento: String(fila.tipo_documento || tipoDocumento || ''),
-    tieneArchivo: Boolean(urlArchivo),
-    estatus: estatus,
-    observaciones: String(fila.observaciones === undefined || fila.observaciones === null ? '' : fila.observaciones).trim(),
-    fecha_carga: convertirFechaTexto(fila.fecha_carga),
-    fecha_dictamen: convertirFechaTexto(fila.fecha_dictamen),
-    dictaminador: String(fila.dictaminador || ''),
-    puedeDictaminar: estatus === ESTATUS_DOCUMENTO.EN_REVISION
-  };
 }
 
 /**
@@ -322,12 +266,12 @@ function coincideFiltrosExpediente(expediente, filtros) {
 }
 
 /**
- * Devuelve las carreras presentes en la lista de estudiantes.
+ * Devuelve las carreras presentes en los expedientes del tramite.
  */
-function obtenerCarrerasRegistradas(estudiantes) {
+function obtenerCarrerasRegistradas(expedientes) {
   const carreras = {};
-  estudiantes.forEach(function (estudiante) {
-    const carrera = String(estudiante.carrera || '').trim();
+  expedientes.forEach(function (expediente) {
+    const carrera = String(expediente.carrera || '').trim();
     if (carrera) {
       carreras[carrera] = true;
     }

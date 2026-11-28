@@ -4,7 +4,8 @@
  * sobreescritura de datos" (seccion 11) con el codigo real de carga.
  *
  * Flujo desde el panel del Administrador:
- *   1. apiPrepararPruebaCarga: crea N alumnos PRUEBA-0001... y sus carpetas.
+ *   1. apiPrepararPruebaCarga: crea N alumnos PRUEBA-0001..., los habilita
+ *      en un tramite interno oculto (solo pide CURP) y crea sus carpetas.
  *   2. El navegador lanza N llamadas a apiEjecutarCargaPrueba a la vez.
  *   3. apiVerificarPruebaCarga: revisa que haya exactamente un documento y
  *      un registro de historial por alumno, sin duplicados.
@@ -54,11 +55,24 @@ function apiPrepararPruebaCarga(datos) {
       if (existentes.length) {
         throw crearError('VALIDACION', 'Quedan ' + existentes.length + ' alumnos de una prueba anterior. Primero limpia la prueba.');
       }
+      asegurarProcesoDePrueba();
       insertarRegistros(HOJAS.ESTUDIANTES, alumnos);
+      insertarRegistros(HOJAS.ALUMNOS_PROCESO, alumnos.map(function (alumno) {
+        return {
+          id_proceso: ID_PROCESO_PRUEBA,
+          matricula: alumno.matricula,
+          carrera: NOMBRE_GRUPO_PRUEBA,
+          generacion: NOMBRE_GRUPO_PRUEBA,
+          estatus: ESTATUS_EXPEDIENTE.PENDIENTE,
+          fecha_alta: new Date()
+        };
+      }));
     });
 
     // Igual que una importacion real: las carpetas se crean antes de las cargas.
-    const carpetas = crearCarpetasConContinuacion(alumnos, TIEMPO_CARPETAS_IMPORTACION_MS);
+    const carpetas = crearCarpetasConContinuacion(alumnos.map(function (alumno) {
+      return { matricula: alumno.matricula, carrera: NOMBRE_GRUPO_PRUEBA, grupo: NOMBRE_GRUPO_PRUEBA };
+    }), TIEMPO_CARPETAS_IMPORTACION_MS);
     return {
       ok: true,
       matriculas: alumnos.map(function (alumno) { return alumno.matricula; }),
@@ -68,8 +82,27 @@ function apiPrepararPruebaCarga(datos) {
 }
 
 /**
+ * Tramite interno de la prueba: apagado, oculto en los paneles y con un
+ * solo requisito (CURP). Requiere lock activo.
+ */
+function asegurarProcesoDePrueba() {
+  if (!buscarPorClave(HOJAS.PROCESOS, 'id_proceso', ID_PROCESO_PRUEBA)) {
+    insertarRegistros(HOJAS.PROCESOS, [{
+      id_proceso: ID_PROCESO_PRUEBA, nombre: NOMBRE_GRUPO_PRUEBA, activo: false,
+      fecha_apertura: '', fecha_cierre: '', fecha_alta: new Date()
+    }]);
+  }
+  if (!leerRequisitos(ID_PROCESO_PRUEBA).length) {
+    insertarRegistros(HOJAS.REQUISITOS_PROCESO, [{
+      id_proceso: ID_PROCESO_PRUEBA, tipo_documento: TIPOS_DOCUMENTO[0],
+      regla: REGLAS_REUTILIZACION.NUEVO, vigencia_meses: 0, orden: 1
+    }]);
+  }
+}
+
+/**
  * Una carga de prueba: mismo camino que apiSubirDocumento (validacion,
- * Drive, bloqueo, hoja, historial y estatus_general).
+ * Drive, bloqueo, hoja, historial y estatus del alumno en el tramite).
  */
 function apiEjecutarCargaPrueba(datos) {
   return protegerApi(function () {
@@ -83,7 +116,8 @@ function apiEjecutarCargaPrueba(datos) {
     if (!estudiante) {
       throw crearError('NO_REGISTRADO', 'No existe el alumno de prueba ' + matricula + '.');
     }
-    procesarCargaDocumento(usuario, estudiante, TIPOS_DOCUMENTO[0], datos);
+    const contexto = obtenerContextoProceso(estudiante.matricula, ID_PROCESO_PRUEBA, false);
+    procesarCargaDocumento(usuario, estudiante, contexto, contexto.requisitos[0], datos);
     return { ok: true, milisegundos: Date.now() - inicio };
   });
 }
@@ -99,6 +133,10 @@ function apiVerificarPruebaCarga() {
     const alumnos = leerHoja(HOJAS.ESTUDIANTES).filter(esDePrueba);
     const documentos = leerHoja(HOJAS.DOCUMENTOS).filter(esDePrueba);
     const historial = leerHoja(HOJAS.HISTORIAL).filter(esDePrueba);
+    const estatusPorAlumno = {};
+    leerInscripcionesDeProceso(ID_PROCESO_PRUEBA).forEach(function (inscripcion) {
+      estatusPorAlumno[inscripcion.matricula.toUpperCase()] = inscripcion.estatus;
+    });
 
     const documentosPorAlumno = contarPorMatricula(documentos);
     const historialPorAlumno = contarPorMatricula(historial);
@@ -127,7 +165,7 @@ function apiVerificarPruebaCarga() {
       if (!historialPorAlumno[clave]) {
         resultado.alumnosSinHistorial.push(alumno.matricula);
       }
-      if (String(alumno.estatus_general) !== ESTATUS_EXPEDIENTE.EN_REVISION) {
+      if (estatusPorAlumno[clave] !== ESTATUS_EXPEDIENTE.EN_REVISION) {
         resultado.estatusGeneralIncorrecto.push(alumno.matricula);
       }
     });
@@ -169,14 +207,16 @@ function apiLimpiarPruebaCarga() {
       };
       const alumnos = filasDe(HOJAS.ESTUDIANTES);
       const documentos = filasDe(HOJAS.DOCUMENTOS);
+      const inscripciones = filasDe(HOJAS.ALUMNOS_PROCESO);
       eliminarFilas(HOJAS.DOCUMENTOS, documentos.map(function (fila) { return fila._fila; }));
+      eliminarFilas(HOJAS.ALUMNOS_PROCESO, inscripciones.map(function (fila) { return fila._fila; }));
       eliminarFilas(HOJAS.ESTUDIANTES, alumnos.map(function (fila) { return fila._fila; }));
       return { alumnos: alumnos, documentos: documentos.length };
     });
 
     const cache = CacheService.getScriptCache();
     cache.removeAll(eliminados.alumnos.map(function (alumno) {
-      return obtenerClaveCacheCarpeta(alumno.matricula);
+      return obtenerClaveCacheCarpeta({ matricula: alumno.matricula, grupo: NOMBRE_GRUPO_PRUEBA });
     }));
     const carpetaEnPapelera = enviarCarpetaPruebaAPapelera();
     return {

@@ -17,7 +17,17 @@
     .tarjetas + .panel { margin-top: 18px; }
     .aviso-prueba { margin-bottom: 16px; font-size: 13px; }
     .panel-recordatorio { margin-top: 22px; }
-    .filtro-generacion { max-width: 240px; margin-bottom: 18px; }
+    .filtro-proceso { max-width: 320px; margin-bottom: 18px; }
+    .interruptor { position: relative; display: inline-block; width: 42px; height: 24px; }
+    .interruptor input { opacity: 0; width: 0; height: 0; }
+    .interruptor span { position: absolute; inset: 0; border-radius: 999px; background: var(--gris-100); border: 1px solid var(--borde); cursor: pointer; transition: background 0.2s; }
+    .interruptor span::before { content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
+    .interruptor input:checked + span { background: var(--verde-600); border-color: var(--verde-600); }
+    .interruptor input:checked + span::before { transform: translateX(18px); }
+    .interruptor input:focus-visible + span { outline: 2px solid var(--verde-700); outline-offset: 2px; }
+    .tabla-requisitos select, .tabla-requisitos input[type="number"] { width: 100%; min-width: 120px; }
+    .tabla-requisitos input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--verde-700); }
+    .lista-requisitos { margin: 0; padding-left: 18px; font-size: 13px; }
     #estado-recordatorio p { color: var(--texto); }
     .progreso-prueba { height: 10px; border-radius: 999px; background: var(--gris-100); overflow: hidden; margin: 10px 0; }
     .progreso-prueba span { display: block; height: 100%; width: 0; background: var(--verde-600); transition: width 0.2s; }
@@ -57,7 +67,8 @@
   <nav class="menu" aria-label="Secciones del panel">
     <button type="button" class="menu-boton activo" data-seccion="reportes"><i data-icono="grafica"></i>Reportes</button>
     <button type="button" class="menu-boton" data-seccion="dictaminadores"><i data-icono="usuarios"></i>Dictaminadores</button>
-    <button type="button" class="menu-boton" data-seccion="estudiantes"><i data-icono="subir"></i>Importar estudiantes</button>
+    <button type="button" class="menu-boton" data-seccion="procesos"><i data-icono="carpeta"></i>Trámites</button>
+    <button type="button" class="menu-boton" data-seccion="estudiantes"><i data-icono="subir"></i>Habilitar alumnos</button>
     <button type="button" class="menu-boton" data-seccion="configuracion"><i data-icono="ajustes"></i>Configuración</button>
     <button type="button" class="menu-boton" data-seccion="historial"><i data-icono="historial"></i>Historial</button>
     <button type="button" class="menu-boton" data-seccion="prueba"><i data-icono="reloj"></i>Prueba de carga</button>
@@ -73,8 +84,8 @@
         <h2 class="seccion-titulo">Reportes generales</h2>
         <p class="seccion-descripcion">Resumen del avance de los expedientes de nuevo ingreso.</p>
       </div>
-      <label class="campo filtro-generacion">Generación
-        <select id="filtro-generacion-reportes"></select>
+      <label class="campo filtro-proceso">Trámite
+        <select id="filtro-proceso-reportes"></select>
       </label>
       <div id="contenedor-reportes">
         <p class="cargando">Cargando reportes...</p>
@@ -83,7 +94,7 @@
       <!-- Recordatorio por correo a alumnos con documentos pendientes -->
       <div class="panel panel-recordatorio">
         <h3>Recordatorio a alumnos con documentos pendientes</h3>
-        <p class="panel-descripcion">Envía el correo "Documentos pendientes" a los alumnos de la generación activa que aún no suben todo. Se envían los que permite la cuota diaria de Google; el resto sale solo al día siguiente y nadie lo recibe dos veces en la misma campaña.</p>
+        <p class="panel-descripcion">Envía el correo "Documentos pendientes" a los alumnos del trámite elegido arriba que aún no suben todo. Se envían los que permite la cuota diaria de Google; el resto sale solo al día siguiente y nadie lo recibe dos veces en la misma campaña.</p>
         <div id="estado-recordatorio"><p class="cargando">Consultando...</p></div>
         <div class="formulario-acciones">
           <button type="button" class="boton" id="boton-recordatorio"><i data-icono="correo"></i>Enviar recordatorio</button>
@@ -145,11 +156,55 @@
       </div>
     </section>
 
-    <!-- RF-25: importar lista de estudiantes -->
+    <!-- Tramites que el Administrador enciende o apaga -->
+    <section id="seccion-procesos" class="seccion" hidden>
+      <div class="seccion-encabezado">
+        <h2 class="seccion-titulo">Trámites</h2>
+        <p class="seccion-descripcion">Encendido, el trámite aparece a sus alumnos habilitados. Apagado, desaparece de su panel y sus datos se conservan.</p>
+      </div>
+      <div class="panel">
+        <div class="tabla-contenedor">
+          <table>
+            <thead><tr><th>Trámite</th><th>Carga de documentos</th><th>Documentos</th><th>Alumnos</th><th>Encendido</th><th>Acciones</th></tr></thead>
+            <tbody id="cuerpo-procesos"><tr><td colspan="6" class="cargando">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 id="titulo-form-proceso">Nuevo trámite</h3>
+        <p class="panel-descripcion">Se crea apagado. Después habilita a sus alumnos y enciéndelo cuando deba empezar.</p>
+        <form id="form-proceso" class="formulario">
+          <label class="campo">Nombre
+            <input type="text" id="proceso-nombre" maxlength="80" placeholder="Titulación TSU 2027" required>
+          </label>
+          <label class="campo">Abre el
+            <input type="date" id="proceso-apertura">
+          </label>
+          <label class="campo">Cierra el
+            <input type="date" id="proceso-cierre">
+          </label>
+          <div class="campo-ancho">
+            <p class="panel-descripcion">Marca los documentos que pide y si se toman del expediente del alumno cuando ya los tiene.</p>
+            <div class="tabla-contenedor">
+              <table class="tabla-requisitos">
+                <thead><tr><th>Pedir</th><th>Documento</th><th>Formato</th><th>Reutilización</th><th>Vigencia (meses)</th></tr></thead>
+                <tbody id="cuerpo-requisitos"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="formulario-acciones">
+            <button type="submit" class="boton" id="boton-guardar-proceso">Guardar trámite</button>
+            <button type="button" class="boton boton-secundario" id="boton-nuevo-proceso">Nuevo trámite</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- RF-25: habilitar alumnos en un tramite -->
     <section id="seccion-estudiantes" class="seccion" hidden>
       <div class="seccion-encabezado">
-        <h2 class="seccion-titulo">Importar estudiantes</h2>
-        <p class="seccion-descripcion">Carga la lista de estudiantes de nuevo ingreso desde un archivo CSV.</p>
+        <h2 class="seccion-titulo">Habilitar alumnos</h2>
+        <p class="seccion-descripcion">Carga desde un CSV la lista de alumnos que deben hacer un trámite.</p>
       </div>
 
       <div class="panel">
@@ -157,11 +212,19 @@
           Columnas obligatorias: <code>matricula</code>, <code>nombre</code>,
           <code>correo_institucional</code>, <code>carrera</code>, <code>generacion</code>.
           Opcionales: <code>correo_personal</code>, <code>telefono</code>.
-          El <code>estatus_general</code> lo calcula el sistema automáticamente.
+          La carrera y la generación son las del trámite (por ejemplo, la de egreso en titulación).
           El correo institucional debe pertenecer a <code>@alumno.utpuebla.edu.mx</code>.
           Se acepta CSV con coma o punto y coma. Si hay un solo error, no se importa nada.
+          Si un alumno ya existe (misma matrícula) no se duplica: solo se le habilita el trámite.
         </p>
         <div class="formulario">
+          <label class="campo">Trámite
+            <select id="importar-proceso"></select>
+          </label>
+          <label class="campo casilla campo-ancho">
+            <input type="checkbox" id="importar-actualizar">
+            Actualizar nombre, correos, teléfono, carrera y generación de los alumnos que ya existen
+          </label>
           <label class="campo">Archivo CSV
             <input type="file" id="archivo-estudiantes" accept=".csv,.txt">
           </label>
@@ -169,7 +232,7 @@
             <textarea id="texto-estudiantes" placeholder="matricula;nombre;correo_institucional;carrera;generacion&#10;20260001;Ana Lopez;ana.lopez@alumno.utpuebla.edu.mx;Ingenieria;2027"></textarea>
           </label>
           <div class="formulario-acciones">
-            <button type="button" class="boton" id="boton-importar">Importar</button>
+            <button type="button" class="boton" id="boton-importar">Habilitar alumnos</button>
             <button type="button" class="boton boton-secundario" id="boton-limpiar-importacion">Limpiar</button>
           </div>
         </div>
@@ -181,16 +244,13 @@
     <section id="seccion-configuracion" class="seccion" hidden>
       <div class="seccion-encabezado">
         <h2 class="seccion-titulo">Configuración</h2>
-        <p class="seccion-descripcion">Parámetros de carga y textos de los correos automáticos.</p>
+        <p class="seccion-descripcion">Parámetros de carga y textos de los correos automáticos. Los formatos permitidos dependen de cada documento: la fotografía en JPG o PNG y el resto en PDF.</p>
       </div>
 
       <div class="panel">
         <form id="form-configuracion" class="formulario">
           <label class="campo">Tamaño máximo de archivo (MB)
             <input type="number" id="campo-tamano" min="2" max="5" step="1" required>
-          </label>
-          <label class="campo">Tipos permitidos
-            <input type="text" id="campo-tipos" placeholder="PDF" required>
           </label>
           <label class="campo">Generación activa
             <input type="text" id="campo-generacion" maxlength="30" placeholder="2027" required>
@@ -361,12 +421,16 @@
     // Estado del panel: secciones cargadas, listas en memoria y paginacion.
     const estadoPagina = {
       seccion: 'reportes',
-      cargado: { reportes: false, dictaminadores: false, configuracion: false, historial: false },
+      cargado: { reportes: false, dictaminadores: false, configuracion: false, historial: false, procesos: false },
+      procesos: [],
+      catalogo: [],
+      reglas: [],
+      procesoEditando: '',
+      procesoReportes: null,
       dictaminadores: [],
       historial: { registros: [], hayMas: false },
       editandoCorreo: '',
-      correoActual: '',
-      generacionActiva: ''
+      correoActual: ''
     };
 
     // Indicadores agrupados: primero alumnos (lo que se pregunta en juntas:
@@ -439,7 +503,11 @@
       document.getElementById('form-plantillas').addEventListener('submit', guardarPlantillas);
       document.getElementById('boton-restaurar-plantillas').addEventListener('click', restaurarPlantillas);
 
-      document.getElementById('filtro-generacion-reportes').addEventListener('change', cargarReportes);
+      document.getElementById('filtro-proceso-reportes').addEventListener('change', cargarReportes);
+      document.getElementById('form-proceso').addEventListener('submit', guardarProceso);
+      document.getElementById('boton-nuevo-proceso').addEventListener('click', function () { renderFormularioProceso(null); });
+      document.getElementById('cuerpo-procesos').addEventListener('click', manejarAccionProceso);
+      document.getElementById('cuerpo-procesos').addEventListener('change', manejarInterruptorProceso);
       document.getElementById('boton-recordatorio').addEventListener('click', function () { enviarRecordatorio(false); });
       document.getElementById('boton-recordatorio-nuevo').addEventListener('click', function () { enviarRecordatorio(true); });
 
@@ -462,7 +530,6 @@
       });
 
       cargarReportes();
-      cargarEstadoRecordatorio();
     });
 
     /* ---------------- Navegacion por secciones ---------------- */
@@ -482,6 +549,8 @@
         cargarDictaminadores();
       } else if (nombre === 'configuracion' && !estadoPagina.cargado.configuracion) {
         cargarConfiguracion();
+      } else if ((nombre === 'procesos' || nombre === 'estudiantes') && !estadoPagina.cargado.procesos) {
+        cargarProcesos();
       } else if (nombre === 'historial' && !estadoPagina.cargado.historial) {
         cargarHistorial(true);
       }
@@ -494,9 +563,17 @@
       estadoPagina.cargado.reportes = true;
       contenedor.innerHTML = '<p class="cargando">Cargando reportes...</p>';
       try {
-        const selectGeneracion = document.getElementById('filtro-generacion-reportes');
-        const respuesta = await api('apiObtenerReportesGenerales', { generacion: leerFiltroGeneracion(selectGeneracion) });
-        renderOpcionesGeneracion(selectGeneracion, respuesta);
+        const selectProceso = document.getElementById('filtro-proceso-reportes');
+        const respuesta = await api('apiObtenerReportesGenerales', { idProceso: leerFiltroProceso(selectProceso) });
+        renderOpcionesProceso(selectProceso, respuesta);
+        estadoPagina.procesoReportes = (respuesta.procesos || []).find(function (proceso) {
+          return proceso.id_proceso === respuesta.idProceso;
+        }) || null;
+        cargarEstadoRecordatorio();
+        if (!estadoPagina.procesoReportes) {
+          contenedor.innerHTML = '<p class="vacio">Todavía no hay trámites. Créalos en la sección Trámites.</p>';
+          return;
+        }
         contenedor.innerHTML = GRUPOS_REPORTES.map(function (grupo) {
           return '<h3 class="reporte-grupo">' + grupo.titulo + '</h3>' +
             '<div class="tarjetas">' + grupo.tarjetas.map(function (item) {
@@ -544,11 +621,175 @@
         '</tbody></table></div>';
     }
 
+    /* ---------------- Tramites (procesos con interruptor) ---------------- */
+
+    async function cargarProcesos() {
+      estadoPagina.cargado.procesos = true;
+      try {
+        const respuesta = await api('apiObtenerProcesos');
+        estadoPagina.procesos = respuesta.procesos || [];
+        estadoPagina.catalogo = respuesta.catalogo || [];
+        estadoPagina.reglas = respuesta.reglas || [];
+        renderTablaProcesos();
+        renderSelectorImportacion();
+        if (!document.getElementById('cuerpo-requisitos').children.length) {
+          renderFormularioProceso(null);
+        }
+      } catch (error) {
+        estadoPagina.cargado.procesos = false;
+        document.getElementById('cuerpo-procesos').innerHTML =
+          '<tr><td colspan="6" class="resultado-error">' + escapeHtml(error.message) + '</td></tr>';
+      }
+    }
+
+    function describirFechasProceso(proceso) {
+      const desde = proceso.fecha_apertura ? formatearFechaSolo(proceso.fecha_apertura) : 'sin fecha';
+      const hasta = proceso.fecha_cierre ? formatearFechaSolo(proceso.fecha_cierre) : 'sin fecha';
+      return desde + ' al ' + hasta + (proceso.activo && !proceso.abierto ? ' (cerrada hoy)' : '');
+    }
+
+    function renderTablaProcesos() {
+      const cuerpo = document.getElementById('cuerpo-procesos');
+      if (!estadoPagina.procesos.length) {
+        cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Todavía no hay trámites. Crea el primero abajo.</td></tr>';
+        return;
+      }
+      cuerpo.innerHTML = estadoPagina.procesos.map(function (proceso) {
+        const documentos = proceso.requisitos.map(function (requisito) {
+          return '<li>' + escapeHtml(requisito.tipo_documento) + '</li>';
+        }).join('');
+        return '<tr>' +
+          '<td><strong>' + escapeHtml(proceso.nombre) + '</strong></td>' +
+          '<td>' + escapeHtml(describirFechasProceso(proceso)) + '</td>' +
+          '<td><ul class="lista-requisitos">' + documentos + '</ul></td>' +
+          '<td>' + proceso.alumnos + '</td>' +
+          '<td><label class="interruptor" title="Encender o apagar el trámite">' +
+            '<input type="checkbox" data-proceso="' + escapeHtml(proceso.id_proceso) + '"' + (proceso.activo ? ' checked' : '') + '>' +
+            '<span></span></label></td>' +
+          '<td><button type="button" class="boton boton-mini boton-secundario" data-accion="editar-proceso" ' +
+            'data-proceso="' + escapeHtml(proceso.id_proceso) + '">Editar</button></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function renderSelectorImportacion() {
+      const select = document.getElementById('importar-proceso');
+      const elegido = select.value;
+      select.innerHTML = estadoPagina.procesos.length
+        ? estadoPagina.procesos.map(function (proceso) {
+            return '<option value="' + escapeHtml(proceso.id_proceso) + '">' +
+              escapeHtml(proceso.nombre + (proceso.activo ? '' : ' (apagado)')) + '</option>';
+          }).join('')
+        : '<option value="">Primero crea un trámite</option>';
+      if (elegido) {
+        select.value = elegido;
+      }
+    }
+
+    /**
+     * Llena el formulario con un tramite (o vacio para uno nuevo): una fila
+     * por documento del catalogo con su regla de reutilizacion.
+     */
+    function renderFormularioProceso(proceso) {
+      estadoPagina.procesoEditando = proceso ? proceso.id_proceso : '';
+      document.getElementById('titulo-form-proceso').textContent = proceso ? 'Editar ' + proceso.nombre : 'Nuevo trámite';
+      document.getElementById('proceso-nombre').value = proceso ? proceso.nombre : '';
+      document.getElementById('proceso-apertura').value = proceso ? proceso.fecha_apertura : '';
+      document.getElementById('proceso-cierre').value = proceso ? proceso.fecha_cierre : '';
+      const requisitos = proceso ? proceso.requisitos : [];
+      document.getElementById('cuerpo-requisitos').innerHTML = estadoPagina.catalogo.map(function (documento, indice) {
+        const requisito = requisitos.find(function (item) { return item.tipo_documento === documento.tipo; });
+        const reglaElegida = requisito ? requisito.regla : 'APROBADO';
+        const opciones = estadoPagina.reglas.map(function (regla) {
+          return '<option value="' + regla.regla + '"' + (regla.regla === reglaElegida ? ' selected' : '') + '>' +
+            escapeHtml(regla.etiqueta) + '</option>';
+        }).join('');
+        return '<tr data-tipo="' + escapeHtml(documento.tipo) + '">' +
+          '<td><input type="checkbox" class="requisito-pedir" id="requisito-' + indice + '"' + (requisito ? ' checked' : '') + '></td>' +
+          '<td><label for="requisito-' + indice + '">' + escapeHtml(documento.tipo) + '</label></td>' +
+          '<td>' + escapeHtml(documento.formatos.join(', ')) + '</td>' +
+          '<td><select class="requisito-regla">' + opciones + '</select></td>' +
+          '<td><input type="number" class="requisito-vigencia" min="0" max="120" step="1" value="' +
+            (requisito ? requisito.vigencia_meses : 0) + '"></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function leerRequisitosFormulario() {
+      return Array.prototype.map.call(document.querySelectorAll('#cuerpo-requisitos tr'), function (fila) {
+        return fila.querySelector('.requisito-pedir').checked ? {
+          tipoDocumento: fila.dataset.tipo,
+          regla: fila.querySelector('.requisito-regla').value,
+          vigenciaMeses: Number(fila.querySelector('.requisito-vigencia').value || 0)
+        } : null;
+      }).filter(Boolean);
+    }
+
+    async function guardarProceso(evento) {
+      evento.preventDefault();
+      const boton = document.getElementById('boton-guardar-proceso');
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiGuardarProceso', {
+          idProceso: estadoPagina.procesoEditando,
+          nombre: document.getElementById('proceso-nombre').value,
+          fechaApertura: document.getElementById('proceso-apertura').value,
+          fechaCierre: document.getElementById('proceso-cierre').value,
+          requisitos: leerRequisitosFormulario()
+        });
+        mostrarAviso(respuesta.mensaje, 'ok');
+        await cargarProcesos();
+        renderFormularioProceso(estadoPagina.procesos.find(function (proceso) {
+          return proceso.id_proceso === respuesta.idProceso;
+        }) || null);
+        estadoPagina.cargado.reportes = false;
+        estadoPagina.cargado.historial = false;
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+
+    function manejarAccionProceso(evento) {
+      const boton = evento.target.closest('button[data-accion="editar-proceso"]');
+      if (!boton) {
+        return;
+      }
+      renderFormularioProceso(estadoPagina.procesos.find(function (proceso) {
+        return proceso.id_proceso === boton.dataset.proceso;
+      }) || null);
+      document.getElementById('form-proceso').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function manejarInterruptorProceso(evento) {
+      const casilla = evento.target;
+      if (!casilla.dataset || !casilla.dataset.proceso) {
+        return;
+      }
+      const activo = casilla.checked;
+      casilla.disabled = true;
+      try {
+        const respuesta = await api('apiCambiarEstadoProceso', { idProceso: casilla.dataset.proceso, activo: activo });
+        mostrarAviso(respuesta.mensaje, 'ok');
+        estadoPagina.cargado.reportes = false;
+        estadoPagina.cargado.historial = false;
+        await cargarProcesos();
+      } catch (error) {
+        casilla.checked = !activo;
+        mostrarAviso(error.message, 'error');
+      } finally {
+        casilla.disabled = false;
+      }
+    }
+
     /* ---------------- Recordatorio a pendientes ---------------- */
 
     async function cargarEstadoRecordatorio() {
       try {
-        const respuesta = await api('apiObtenerEstadoRecordatorio');
+        const respuesta = await api('apiObtenerEstadoRecordatorio', {
+          idProceso: estadoPagina.procesoReportes ? estadoPagina.procesoReportes.id_proceso : ''
+        });
         mostrarEstadoRecordatorio(respuesta.estado);
       } catch (error) {
         document.getElementById('estado-recordatorio').innerHTML = '<p class="resultado-error">' + escapeHtml(error.message) + '</p>';
@@ -558,13 +799,13 @@
     function mostrarEstadoRecordatorio(estado) {
       const campania = estado.campania;
       const lineas = [];
-      estadoPagina.generacionActiva = estado.generacionActiva || '';
+      const proceso = estadoPagina.procesoReportes;
       if (!campania) {
-        lineas.push('No se ha enviado ningún recordatorio. Alumnos de la generación <strong>' + escapeHtml(estado.generacion) +
+        lineas.push('No se ha enviado ningún recordatorio. Alumnos de <strong>' + escapeHtml(proceso ? proceso.nombre : '-') +
           '</strong> con documentos pendientes: <strong>' + estado.faltan + '</strong>.');
       } else {
-        lineas.push('Campaña <strong>' + escapeHtml(campania.id) + '</strong> (generación <strong>' +
-          escapeHtml(estado.generacion || 'todas') + '</strong>) iniciada el ' + escapeHtml(formatearFechaHora(campania.inicio)) + '.');
+        lineas.push('Campaña <strong>' + escapeHtml(campania.id) + '</strong> (' +
+          escapeHtml(campania.nombreProceso || 'anterior a los trámites') + ') iniciada el ' + escapeHtml(formatearFechaHora(campania.inicio)) + '.');
         lineas.push('Enviados: <strong>' + estado.enviados + '</strong> · Faltan: <strong>' + estado.faltan + '</strong>.');
         if (campania.terminada) {
           lineas.push('La campaña terminó: todos los alumnos con pendientes ya recibieron su recordatorio.');
@@ -581,9 +822,13 @@
     }
 
     async function enviarRecordatorio(nueva) {
-      const generacion = estadoPagina.generacionActiva;
+      const proceso = estadoPagina.procesoReportes;
+      if (!proceso) {
+        mostrarAviso('Primero crea y elige un trámite.', 'error');
+        return;
+      }
       const mensaje = nueva
-        ? 'Se iniciará una campaña nueva para la generación ' + generacion + ': los alumnos con documentos pendientes recibirán otro recordatorio aunque ya hayan recibido uno antes. ¿Continuar?'
+        ? 'Se iniciará una campaña nueva para ' + proceso.nombre + ': los alumnos con documentos pendientes recibirán otro recordatorio aunque ya hayan recibido uno antes. ¿Continuar?'
         : 'Se enviará el correo "Documentos pendientes" a los alumnos que aún no suben todo. ¿Continuar?';
       if (!confirm(mensaje)) {
         return;
@@ -592,7 +837,7 @@
       marcarCargando(boton, true);
       boton.textContent = 'Enviando… puede tardar unos minutos';
       try {
-        const respuesta = await api('apiIniciarRecordatorio', { nueva: nueva });
+        const respuesta = await api('apiIniciarRecordatorio', { nueva: nueva, idProceso: proceso.id_proceso });
         const estado = respuesta.estado;
         mostrarAviso('Se enviaron ' + estado.enviadosAhora + ' recordatorio(s).' +
           (estado.faltan ? ' Faltan ' + estado.faltan + '; se enviarán solos.' : ''), 'ok');
@@ -895,14 +1140,22 @@
     async function importarEstudiantes() {
       const boton = document.getElementById('boton-importar');
       const texto = document.getElementById('texto-estudiantes').value;
+      const idProceso = document.getElementById('importar-proceso').value;
+      if (!idProceso) {
+        mostrarAviso('Primero crea un trámite en la sección Trámites.', 'error');
+        return;
+      }
       marcarCargando(boton, true);
       try {
-        const respuesta = await api('apiImportarEstudiantes', { texto: texto });
-        mostrarResultadoImportacion(
-          '<div class="resultado-ok">Se importaron ' + respuesta.insertados + ' estudiante(s) correctamente.' +
-          describirCarpetasCreadas(respuesta.carpetas) + '</div>'
-        );
-        mostrarAviso('Importación exitosa: ' + respuesta.insertados + ' registro(s).', 'ok');
+        const respuesta = await api('apiImportarEstudiantes', {
+          texto: texto,
+          idProceso: idProceso,
+          actualizarExistentes: document.getElementById('importar-actualizar').checked
+        });
+        mostrarResultadoImportacion('<div class="resultado-ok">' + describirImportacion(respuesta) +
+          describirCarpetasCreadas(respuesta.carpetas) + '</div>');
+        mostrarAviso('Alumnos habilitados: ' + respuesta.habilitados + '.', 'ok');
+        estadoPagina.cargado.procesos = false;
         document.getElementById('texto-estudiantes').value = '';
         document.getElementById('archivo-estudiantes').value = '';
         estadoPagina.cargado.reportes = false;
@@ -921,8 +1174,23 @@
       }
     }
 
+    function describirImportacion(respuesta) {
+      const partes = ['Alumnos habilitados en el trámite: ' + respuesta.habilitados + '.',
+        'Nuevos en el sistema: ' + respuesta.insertados + '; ya existían: ' + respuesta.existentes + '.'];
+      if (respuesta.actualizados) {
+        partes.push('Se actualizaron los datos de ' + respuesta.actualizados + ' alumno(s).');
+      }
+      if (respuesta.conDiferencias) {
+        partes.push(respuesta.conDiferencias + ' alumno(s) existentes traían datos distintos en el archivo; se conservaron los del sistema.');
+      }
+      if (respuesta.omitidos) {
+        partes.push(respuesta.omitidos + ' ya estaban habilitados y se omitieron.');
+      }
+      return partes.map(escapeHtml).join('<br>');
+    }
+
     /**
-     * Resume las carpetas de Drive creadas por carrera y matricula.
+     * Resume las carpetas de Drive creadas por tramite, carrera y matricula.
      */
     function describirCarpetasCreadas(carpetas) {
       if (!carpetas) {
@@ -970,7 +1238,6 @@
 
     function mostrarConfiguracion(configuracion) {
       document.getElementById('campo-tamano').value = configuracion.TAMANIO_MAXIMO_ARCHIVO_MB;
-      document.getElementById('campo-tipos').value = configuracion.TIPOS_PERMITIDOS;
       document.getElementById('campo-generacion').value = configuracion.GENERACION_ACTIVA;
     }
 
@@ -1029,7 +1296,6 @@
       try {
         const respuesta = await api('apiGuardarConfiguracion', {
           TAMANIO_MAXIMO_ARCHIVO_MB: document.getElementById('campo-tamano').value,
-          TIPOS_PERMITIDOS: document.getElementById('campo-tipos').value,
           GENERACION_ACTIVA: document.getElementById('campo-generacion').value
         });
         estadoPagina.cargado.historial = false;

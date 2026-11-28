@@ -13,6 +13,9 @@
  * (respalda el libro, vacia Estudiantes, Documentos e Historial y manda la
  * carpeta raiz a la papelera; conserva Usuarios y Configuracion).
  * Solo rehacer carpetas de los alumnos ya importados:  reiniciarCarpetas()
+ *
+ * Paso a tramites (una sola vez, con datos anteriores):  migrarAProcesos()
+ * (crea el tramite de nuevo ingreso con los alumnos y documentos existentes).
  */
 
 /**
@@ -26,7 +29,7 @@ function instalarSistema() {
   const clavesAgregadas = agregarConfiguracionFaltante();
   const carpeta = obtenerCarpetaRaizDrive();
   const permisos = sincronizarPermisosCarpeta();
-  const carpetas = crearCarpetasConContinuacion(leerHoja(HOJAS.ESTUDIANTES), TIEMPO_CARPETAS_SEGUNDO_PLANO_MS);
+  const carpetas = crearCarpetasConContinuacion(leerTodasLasCarpetas(), TIEMPO_CARPETAS_SEGUNDO_PLANO_MS);
 
   const resumen = [
     'Libro maestro: ' + libro.getName() + ' (' + libro.getUrl() + ')',
@@ -76,7 +79,7 @@ function reiniciarDatosDelSistema() {
     'Carpetas anteriores enviadas a la papelera de Drive (recuperables por 30 días): ' + carpetaAnterior,
     'Carpeta raíz nueva: ' + carpetaNueva.getUrl(),
     'Personal con acceso a la carpeta nueva: ' + permisos.conAcceso,
-    'Listo: importa la lista de alumnos y se crearán sus carpetas por carrera y matrícula.'
+    'Listo: importa la lista de alumnos a un trámite y se crearán sus carpetas por trámite, carrera y matrícula.'
   ].concat(permisos.avisos);
   console.log(resumen.join('\n'));
   return resumen;
@@ -97,7 +100,7 @@ function reiniciarCarpetas() {
   const enviadas = enviarCarpetaRaizAPapelera();
   const carpetaNueva = obtenerCarpetaRaizDrive();
   const permisos = sincronizarPermisosCarpeta();
-  const carpetas = crearCarpetasConContinuacion(leerHoja(HOJAS.ESTUDIANTES), TIEMPO_CARPETAS_SEGUNDO_PLANO_MS);
+  const carpetas = crearCarpetasConContinuacion(leerTodasLasCarpetas(), TIEMPO_CARPETAS_SEGUNDO_PLANO_MS);
   const resumen = [
     'Carpetas anteriores enviadas a la papelera de Drive: ' + enviadas,
     'Carpeta raíz nueva: ' + carpetaNueva.getUrl(),
@@ -105,6 +108,54 @@ function reiniciarCarpetas() {
     'Carpetas de alumnos creadas: ' + carpetas.creadas + '; pendientes (se terminan en segundo plano): ' + carpetas.pendientes
   ].concat(permisos.avisos);
   console.log(resumen.join('\n'));
+  return resumen;
+}
+
+/**
+ * Pasa los datos anteriores a los tramites: crea el tramite "Nuevo ingreso
+ * <generacion activa>" (encendido, con CURP, acta y certificado), habilita
+ * en el a todos los alumnos y le asigna los documentos que ya tenian.
+ * Solo se ejecuta si todavia no existe ningun tramite. Los archivos ya
+ * subidos se quedan en sus carpetas de Drive; los nuevos van a la carpeta
+ * del tramite.
+ */
+function migrarAProcesos() {
+  inicializarBaseDeDatos();
+  const resultado = conBloqueoEscritura(function () {
+    if (leerProcesos().length) {
+      throw new Error('Ya existen trámites; la migración solo se ejecuta una vez.');
+    }
+    const generacion = String(obtenerValorConfiguracion('GENERACION_ACTIVA') || '').trim();
+    const idProceso = generarId(PREFIJO_ID_PROCESO);
+    const nombre = 'Nuevo ingreso ' + generacion;
+    insertarRegistros(HOJAS.PROCESOS, [{
+      id_proceso: idProceso, nombre: nombre, activo: true, fecha_apertura: '', fecha_cierre: '', fecha_alta: new Date()
+    }]);
+    insertarRegistros(HOJAS.REQUISITOS_PROCESO, TIPOS_DOCUMENTO_NUEVO_INGRESO.map(function (tipo, indice) {
+      return { id_proceso: idProceso, tipo_documento: tipo, regla: REGLAS_REUTILIZACION.NUEVO, vigencia_meses: 0, orden: indice + 1 };
+    }));
+    const alumnos = leerHoja(HOJAS.ESTUDIANTES).filter(function (estudiante) {
+      return !esMatriculaDePrueba(estudiante.matricula);
+    });
+    insertarRegistros(HOJAS.ALUMNOS_PROCESO, alumnos.map(function (estudiante) {
+      return {
+        id_proceso: idProceso,
+        matricula: String(estudiante.matricula).trim(),
+        carrera: String(estudiante.carrera || '').trim(),
+        generacion: String(estudiante.generacion || '').trim(),
+        estatus: String(estudiante.estatus_general || '').trim() || ESTATUS_EXPEDIENTE.PENDIENTE,
+        fecha_alta: new Date()
+      };
+    }));
+    const documentos = leerHoja(HOJAS.DOCUMENTOS);
+    escribirColumna(HOJAS.DOCUMENTOS, 'id_proceso', documentos.map(function (documento) {
+      return String(documento.id_proceso || '').trim() || (esMatriculaDePrueba(documento.matricula) ? ID_PROCESO_PRUEBA : idProceso);
+    }));
+    return { nombre: nombre, alumnos: alumnos.length, documentos: documentos.length };
+  });
+  const resumen = 'Trámite creado: ' + resultado.nombre + ' (encendido). Alumnos habilitados: ' + resultado.alumnos +
+    '. Documentos asignados: ' + resultado.documentos + '.';
+  console.log(resumen);
   return resumen;
 }
 

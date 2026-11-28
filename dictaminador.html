@@ -51,8 +51,8 @@
             <label class="campo">Buscar por matrícula o nombre
               <input type="search" id="filtro-texto" maxlength="120" placeholder="Ej. 20260001 o Ana López">
             </label>
-            <label class="campo">Generación
-              <select id="filtro-generacion"></select>
+            <label class="campo">Trámite
+              <select id="filtro-proceso"></select>
             </label>
             <div class="fila-filtros">
               <label class="campo">Carrera
@@ -109,6 +109,7 @@
     const estadoPagina = {
       expedientes: [],
       carreras: [],
+      idProceso: '',
       expedienteActual: null,
       matriculaActual: '',
       documentoSeleccionado: '',
@@ -121,6 +122,7 @@
 
     const ESTATUS_OBSERVADO = 'Observado';
     const ESTATUS_APROBADO = 'Aprobado';
+    const ORIGEN_REUTILIZADO = 'reutilizado';
     const ANCHO_PANTALLA_APILADA = 900;
 
     const CLASE_PUNTO = {
@@ -134,9 +136,12 @@
         evento.preventDefault();
         cargarExpedientes();
       });
-      document.getElementById('filtro-generacion').addEventListener('change', function () {
-        // Las carreras cambian con la generacion: la elegida podria no existir en la nueva.
+      document.getElementById('filtro-proceso').addEventListener('change', function () {
+        // Cada tramite tiene sus alumnos y carreras: se cierra el expediente abierto.
         document.getElementById('filtro-carrera').value = '';
+        estadoPagina.expedienteActual = null;
+        estadoPagina.matriculaActual = '';
+        renderDetalle();
         cargarExpedientes();
       });
       document.getElementById('filtro-carrera').addEventListener('change', function () { cargarExpedientes(); });
@@ -221,7 +226,7 @@
 
     function obtenerFiltros() {
       return {
-        generacion: leerFiltroGeneracion(document.getElementById('filtro-generacion')),
+        idProceso: leerFiltroProceso(document.getElementById('filtro-proceso')),
         texto: document.getElementById('filtro-texto').value,
         carrera: document.getElementById('filtro-carrera').value,
         estatus: document.getElementById('filtro-estatus').value
@@ -232,8 +237,6 @@
       document.getElementById('filtro-texto').value = '';
       document.getElementById('filtro-carrera').value = '';
       document.getElementById('filtro-estatus').value = 'En Revision';
-      // Sin eleccion de generacion, el servidor vuelve a la generacion activa.
-      delete document.getElementById('filtro-generacion').dataset.listo;
       cargarExpedientes();
     }
 
@@ -250,7 +253,8 @@
         const respuesta = await api('apiObtenerExpedientesDictaminador', obtenerFiltros());
         estadoPagina.expedientes = respuesta.expedientes || [];
         estadoPagina.carreras = respuesta.carreras || [];
-        renderOpcionesGeneracion(document.getElementById('filtro-generacion'), respuesta);
+        estadoPagina.idProceso = respuesta.idProceso || '';
+        renderOpcionesProceso(document.getElementById('filtro-proceso'), respuesta);
         renderCarreras();
         renderLista();
       } catch (error) {
@@ -280,6 +284,10 @@
         : '';
       if (!expedientes.length) {
         lista.innerHTML = '<p class="vacio">No hay expedientes con los filtros seleccionados.</p>';
+        return;
+      }
+      if (!estadoPagina.idProceso) {
+        lista.innerHTML = '<p class="vacio">Todavía no hay trámites. El administrador los crea en su panel.</p>';
         return;
       }
       lista.innerHTML = expedientes.map(function (expediente) {
@@ -322,7 +330,7 @@
         detalle.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
       try {
-        const respuesta = await api('apiObtenerExpedienteDictaminador', { matricula: matricula });
+        const respuesta = await api('apiObtenerExpedienteDictaminador', { matricula: matricula, idProceso: estadoPagina.idProceso });
         estadoPagina.expedienteActual = respuesta.expediente;
         const documentos = respuesta.expediente.documentos || [];
         const seleccionado = documentos.find(function (documento) {
@@ -360,7 +368,7 @@
         '<div class="dictamen-cabecera">' +
           '<div>' +
             '<h3>' + escapeHtml(expediente.nombre || 'Estudiante') + '</h3>' +
-            '<p class="dictamen-meta">' + escapeHtml(expediente.matricula) + ' · ' +
+            '<p class="dictamen-meta">' + escapeHtml(expediente.nombre_proceso) + ' · ' + escapeHtml(expediente.matricula) + ' · ' +
               escapeHtml(expediente.carrera || 'Sin carrera') + ' · Generación ' +
               escapeHtml(expediente.generacion || 'sin definir') + '</p>' +
           '</div>' +
@@ -383,11 +391,14 @@
       if (documento && documento.tieneArchivo) {
         mostrarVisor(visor, {
           matricula: expediente.matricula,
-          tipoDocumento: documento.tipo_documento,
+          idDocumento: documento.id_documento,
           version: documento.fecha_carga
         });
       } else {
-        visor.innerHTML = '<div class="visor"><div class="visor-mensaje">El estudiante aún no ha cargado este documento.</div></div>';
+        const mensaje = documento && documento.estatus === ESTATUS_OBSERVADO
+          ? 'Se pidió al estudiante actualizar este documento.'
+          : 'El estudiante aún no ha cargado este documento.';
+        visor.innerHTML = '<div class="visor"><div class="visor-mensaje">' + mensaje + '</div></div>';
       }
     }
 
@@ -404,6 +415,14 @@
       }
       let contenido = '<div class="acciones-dictamen">' +
         '<h4>' + escapeHtml(documento.tipo_documento) + crearEtiquetaEstatus(documento.estatus) + '</h4>';
+
+      if (documento.origen === ORIGEN_REUTILIZADO) {
+        contenido += '<p class="documento-reutilizado">' + icono('carpeta') +
+          'Tomado del expediente del alumno: ya estaba aprobado en otro trámite.</p>';
+      }
+      if (documento.fecha_emision) {
+        contenido += '<p class="documento-meta">Fecha de emisión: ' + escapeHtml(formatearFechaSolo(documento.fecha_emision)) + '</p>';
+      }
 
       if (documento.fecha_carga) {
         contenido += '<p class="documento-meta">Cargado: ' + escapeHtml(formatearFechaHora(documento.fecha_carga)) + '</p>';
@@ -427,6 +446,15 @@
               'data-tipo="' + escapeHtml(documento.tipo_documento) + '">' + icono('check') + 'Aprobar</button>' +
             '<button type="button" class="boton boton-peligro-solido" data-accion="observar" ' +
               'data-tipo="' + escapeHtml(documento.tipo_documento) + '">' + icono('alerta') + 'Observar / rechazar</button>' +
+          '</div>';
+      } else if (documento.puedeSolicitarActualizacion) {
+        contenido +=
+          '<label class="campo">Pedir que lo actualice <span class="texto-secundario">Úsalo si no sirve para este trámite.</span>' +
+            '<textarea id="campo-observacion" maxlength="1000" placeholder="Ej. El acta no es legible para titulación, sube una actualizada."></textarea>' +
+          '</label>' +
+          '<div class="formulario-acciones">' +
+            '<button type="button" class="boton boton-peligro-solido" data-accion="solicitar-actualizacion" ' +
+              'data-tipo="' + escapeHtml(documento.tipo_documento) + '">' + icono('alerta') + 'Pedir actualización</button>' +
           '</div>';
       } else if (documento.estatus === ESTATUS_APROBADO) {
         contenido += '<div class="dictamen-final">' + icono('check') + 'Documento aprobado.</div>';
@@ -456,6 +484,8 @@
       }
       if (boton.dataset.accion === 'aprobar' || boton.dataset.accion === 'observar') {
         procesarDictamen(boton);
+      } else if (boton.dataset.accion === 'solicitar-actualizacion') {
+        solicitarActualizacion(boton);
       }
     }
 
@@ -484,6 +514,7 @@
       try {
         const respuesta = await api('apiDictaminarDocumento', {
           matricula: expediente.matricula,
+          idProceso: expediente.id_proceso,
           tipoDocumento: documento.tipo_documento,
           estatusNuevo: estatusNuevo,
           observacion: observacion,
@@ -500,6 +531,49 @@
         estadoPagina.documentoSeleccionado = siguiente ? siguiente.tipo_documento : documento.tipo_documento;
         renderDetalle();
         mostrarAviso(respuesta.mensaje, respuesta.notificado === false && estatusNuevo === ESTATUS_OBSERVADO ? 'error' : 'ok');
+        await cargarExpedientes(false);
+      } catch (error) {
+        mostrarAviso(error.message, 'error');
+        if (error.codigo === 'CONFLICTO') {
+          await abrirExpediente(expediente.matricula);
+        }
+      } finally {
+        marcarCargando(boton, false);
+      }
+    }
+
+    /**
+     * Un documento reutilizado no sirve para este tramite: se le pide al
+     * alumno que suba uno nuevo solo de ese documento.
+     */
+    async function solicitarActualizacion(boton) {
+      const expediente = estadoPagina.expedienteActual;
+      const documento = expediente ? obtenerDocumentoSeleccionado(expediente) : null;
+      const campo = document.getElementById('campo-observacion');
+      const observacion = campo ? campo.value.trim() : '';
+      if (!expediente || !documento) {
+        return;
+      }
+      if (!observacion) {
+        mostrarAviso('Escribe por qué debe actualizar el documento.', 'error');
+        if (campo) {
+          campo.focus();
+        }
+        return;
+      }
+      marcarCargando(boton, true);
+      try {
+        const respuesta = await api('apiSolicitarActualizacionDocumento', {
+          matricula: expediente.matricula,
+          idProceso: expediente.id_proceso,
+          tipoDocumento: documento.tipo_documento,
+          observacion: observacion
+        });
+        estadoPagina.expedienteActual = respuesta.expediente;
+        delete estadoPagina.historialPorMatricula[expediente.matricula];
+        estadoPagina.actividadCargada = false;
+        renderDetalle();
+        mostrarAviso(respuesta.mensaje, respuesta.notificado ? 'ok' : 'error');
         await cargarExpedientes(false);
       } catch (error) {
         mostrarAviso(error.message, 'error');

@@ -114,10 +114,34 @@ function inicializarBaseDeDatos() {
       hoja.appendRow(encabezados);
       hoja.getRange(1, 1, 1, encabezados.length).setFontWeight('bold');
       hoja.setFrozenRows(1);
+    } else {
+      agregarEncabezadosFaltantes(hoja, encabezados);
     }
     quitarColumnasVacias(hoja, encabezados.length);
   });
+  cacheEjecucion.encabezados = {};
   return { ok: true, hojasCreadas: hojasCreadas };
+}
+
+/**
+ * Anexa al final las columnas nuevas de una hoja que ya tiene datos, para
+ * no mover las existentes (las filas viejas quedan con la celda vacia).
+ */
+function agregarEncabezadosFaltantes(hoja, encabezados) {
+  const actuales = hoja.getRange(1, 1, 1, Math.max(hoja.getLastColumn(), 1)).getValues()[0].map(function (valor) {
+    return String(valor).trim();
+  });
+  const faltantes = encabezados.filter(function (encabezado) {
+    return actuales.indexOf(encabezado) === -1;
+  });
+  if (!faltantes.length) {
+    return;
+  }
+  const primeraLibre = hoja.getLastColumn() + 1;
+  if (hoja.getMaxColumns() < primeraLibre + faltantes.length - 1) {
+    hoja.insertColumnsAfter(hoja.getMaxColumns(), primeraLibre + faltantes.length - 1 - hoja.getMaxColumns());
+  }
+  hoja.getRange(1, primeraLibre, 1, faltantes.length).setValues([faltantes]).setFontWeight('bold');
 }
 
 /**

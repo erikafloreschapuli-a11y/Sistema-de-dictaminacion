@@ -1,24 +1,27 @@
 /**
  * ServicioReportes.js
  * Estadisticas generales del panel del Administrador (RF-23).
- * Se calculan por expediente: cada alumno tiene sus tres documentos, aunque
- * todavia no haya subido alguno (cuenta como Pendiente). Los alumnos de la
- * prueba de carga no se cuentan.
+ * Se calculan por tramite y por expediente: cada alumno cuenta con todos
+ * los documentos que pide el tramite, aunque todavia no haya subido alguno
+ * (cuenta como Pendiente). La prueba de carga vive en un tramite oculto.
  */
 
 /**
- * Indicadores por alumno, por documento y por carrera (RF-23).
- * datos.generacion: sin valor = generacion activa; "todas" = sin filtro.
+ * Indicadores por alumno, por documento y por carrera de un tramite (RF-23).
+ * datos.idProceso: sin valor = el primero encendido.
  */
 function apiObtenerReportesGenerales(datos) {
   return protegerApi(function () {
     asegurarRol([ROLES.ADMINISTRADOR]);
-    const estudiantes = leerHoja(HOJAS.ESTUDIANTES);
-    const generacion = resolverFiltroGeneracion(datos && datos.generacion);
-    const reportes = construirReportesGenerales(filtrarPorGeneracion(estudiantes, generacion), leerHoja(HOJAS.DOCUMENTOS));
+    const procesos = leerProcesos();
+    const proceso = resolverProcesoElegido(datos && datos.idProceso, procesos);
+    const expedientes = proceso
+      ? construirExpedientesDeProceso(proceso, leerRequisitos(proceso.id_proceso)).map(function (fila) { return fila.expediente; })
+      : [];
+    const reportes = construirReportesGenerales(expedientes);
     // Se muestra para que el Administrador anticipe dias de mucho dictamen (RNF-10).
     reportes.cuotaCorreosRestante = obtenerCuotaCorreosRestante();
-    return Object.assign({ ok: true, reportes: reportes }, construirOpcionesGeneracion(estudiantes, generacion));
+    return Object.assign({ ok: true, reportes: reportes }, construirOpcionesProceso(procesos, proceso));
   });
 }
 
@@ -65,17 +68,14 @@ function sumarExpedienteAReporte(contadores, expediente) {
 }
 
 /**
- * Calcula los indicadores generales y el desglose por carrera.
- * Separado de la API para poder probarlo sin sesion.
+ * Calcula los indicadores generales y el desglose por carrera a partir de
+ * los expedientes de un tramite. Separado de la API para poder probarlo sin sesion.
  */
-function construirReportesGenerales(estudiantes, documentos) {
-  const alumnosReales = estudiantes.filter(function (estudiante) {
-    return !esMatriculaDePrueba(estudiante.matricula);
-  });
+function construirReportesGenerales(expedientes) {
   const reportes = crearContadoresReporte();
   const porCarrera = {};
 
-  construirExpedientes(alumnosReales, documentos).forEach(function (expediente) {
+  expedientes.forEach(function (expediente) {
     sumarExpedienteAReporte(reportes, expediente);
     const carrera = expediente.carrera || CARPETA_SIN_CARRERA;
     porCarrera[carrera] = porCarrera[carrera] || crearContadoresReporte();
@@ -88,27 +88,4 @@ function construirReportesGenerales(estudiantes, documentos) {
     return Object.assign({ carrera: carrera }, porCarrera[carrera]);
   });
   return reportes;
-}
-
-/**
- * Devuelve un mapa "matricula|tipo_documento" con el documento mas reciente.
- */
-function obtenerUltimaVersionPorTipo(documentos) {
-  const ultimos = {};
-  documentos.forEach(function (documento) {
-    const clave = String(documento.matricula) + '|' + String(documento.tipo_documento);
-    const actual = ultimos[clave];
-    if (!actual || momentoDeCarga(documento) >= momentoDeCarga(actual)) {
-      ultimos[clave] = documento;
-    }
-  });
-  return ultimos;
-}
-
-/**
- * Momento en milisegundos de la fecha de carga; 0 si no es interpretable.
- */
-function momentoDeCarga(documento) {
-  const momento = new Date(documento.fecha_carga).getTime();
-  return isNaN(momento) ? 0 : momento;
 }

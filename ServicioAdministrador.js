@@ -137,20 +137,29 @@ function apiCambiarEstadoDictaminador(datos) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Importa estudiantes desde texto CSV (separado por coma o punto y coma).
+ * Habilita en un tramite (datos.idProceso) a los alumnos de un CSV
+ * (separado por coma o punto y coma). La matricula identifica al alumno:
+ *   - si no existe, se da de alta;
+ *   - si ya existe, se conserva su registro y solo se le habilita el tramite
+ *     (sus datos se actualizan unicamente con datos.actualizarExistentes);
+ *   - si ya estaba habilitado en ese tramite, se omite.
  * Todo o nada: si hay errores no se guarda ningun registro (RNF-06).
  */
 function apiImportarEstudiantes(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.ADMINISTRADOR]);
+    const proceso = obtenerProceso(datos && datos.idProceso);
+    if (proceso.id_proceso === ID_PROCESO_PRUEBA) {
+      throw crearError('VALIDACION', 'Elige un trámite para habilitar a los alumnos.');
+    }
+    const actualizarExistentes = Boolean(datos && datos.actualizarExistentes);
     const texto = String((datos && datos.texto) || '').trim();
     if (!texto) {
       throw crearError('VALIDACION', 'Pega o carga un archivo CSV con la lista de estudiantes.');
     }
 
     const parseo = parsearCsv(texto);
-    const columnasRequeridas = ['matricula', 'nombre', 'correo_institucional', 'carrera', 'generacion'];
-    const faltantes = columnasRequeridas.filter(function (columna) {
+    const faltantes = COLUMNAS_IMPORTACION_OBLIGATORIAS.filter(function (columna) {
       return parseo.encabezados.indexOf(columna) === -1;
     });
     if (faltantes.length) {
@@ -160,110 +169,196 @@ function apiImportarEstudiantes(datos) {
       throw crearError('VALIDACION', 'El archivo no contiene registros.');
     }
 
-    const existentes = leerHoja(HOJAS.ESTUDIANTES);
-    const errores = [];
-    const nuevos = [];
-    const matriculasVistas = {};
-    const correosVistos = {};
-
-    existentes.forEach(function (estudiante) {
-      matriculasVistas[String(estudiante.matricula).trim().toLowerCase()] = true;
-      correosVistos[String(estudiante.correo_institucional).trim().toLowerCase()] = true;
-    });
-
-    parseo.filas.forEach(function (fila, indice) {
-      const numeroFila = indice + 2;
-      const matricula = String(fila.matricula || '').trim();
-      const nombre = String(fila.nombre || '').trim();
-      const correoInstitucional = normalizarCorreo(fila.correo_institucional);
-      const correoPersonal = normalizarCorreo(fila.correo_personal);
-      const telefono = String(fila.telefono || '').trim();
-      const carrera = String(fila.carrera || '').trim();
-      const generacion = String(fila.generacion || '').trim();
-      const claveMatricula = matricula.toLowerCase();
-
-      if (!matricula) {
-        errores.push({ fila: numeroFila, mensaje: 'matricula vacia' });
-      } else if (matriculasVistas[claveMatricula]) {
-        errores.push({ fila: numeroFila, mensaje: 'matricula duplicada: ' + matricula });
-      }
-      if (!nombre) {
-        errores.push({ fila: numeroFila, mensaje: 'nombre vacio' });
-      }
-      if (!correoInstitucional) {
-        errores.push({ fila: numeroFila, mensaje: 'correo_institucional vacio' });
-      } else if (!esCorreoValido(correoInstitucional)) {
-        errores.push({ fila: numeroFila, mensaje: 'correo_institucional con formato invalido: ' + correoInstitucional });
-      } else if (!esCorreoEstudiante(correoInstitucional)) {
-        errores.push({ fila: numeroFila, mensaje: 'correo_institucional fuera del dominio ' + DOMINIO_ESTUDIANTE + ': ' + correoInstitucional });
-      } else if (correosVistos[correoInstitucional]) {
-        errores.push({ fila: numeroFila, mensaje: 'correo_institucional duplicado: ' + correoInstitucional });
-      }
-      if (correoPersonal && !esCorreoValido(correoPersonal)) {
-        errores.push({ fila: numeroFila, mensaje: 'correo_personal con formato invalido: ' + correoPersonal });
-      }
-      if (telefono && !/^[0-9+\-() ]{5,20}$/.test(telefono)) {
-        errores.push({ fila: numeroFila, mensaje: 'telefono invalido: ' + telefono });
-      }
-      if (!carrera) {
-        errores.push({ fila: numeroFila, mensaje: 'carrera vacia' });
-      }
-      if (!generacion) {
-        errores.push({ fila: numeroFila, mensaje: 'generacion vacia' });
-      }
-
-      matriculasVistas[claveMatricula] = true;
-      correosVistos[correoInstitucional] = true;
-      nuevos.push({
-        matricula: matricula,
-        nombre: nombre,
-        correo_institucional: correoInstitucional,
-        correo_personal: correoPersonal,
-        telefono: telefono,
-        carrera: carrera,
-        generacion: generacion,
-        // El estatus se calcula a partir de los documentos; un alumno nuevo no tiene ninguno.
-        estatus_general: ESTATUS_EXPEDIENTE.PENDIENTE
-      });
-    });
-
-    if (errores.length) {
+    const validacion = validarFilasImportacion(parseo.filas, leerHoja(HOJAS.ESTUDIANTES));
+    if (validacion.errores.length) {
       return {
         ok: false,
         codigo: 'VALIDACION',
-        mensaje: 'Se encontraron ' + errores.length + ' error(es). No se importo ningun registro.',
-        errores: errores
+        mensaje: 'Se encontraron ' + validacion.errores.length + ' error(es). No se importo ningun registro.',
+        errores: validacion.errores
       };
     }
 
     const resultado = conBloqueoEscritura(function () {
-      const actuales = leerHoja(HOJAS.ESTUDIANTES);
-      const matriculasAhora = {};
-      actuales.forEach(function (estudiante) {
-        matriculasAhora[String(estudiante.matricula).trim().toLowerCase()] = true;
-      });
-      const enConflicto = nuevos.filter(function (estudiante) {
-        return matriculasAhora[estudiante.matricula.toLowerCase()];
-      });
-      if (enConflicto.length) {
-        throw crearError('VALIDACION', 'La lista cambio durante la importacion. Matriculas duplicadas: ' +
-          enConflicto.map(function (estudiante) { return estudiante.matricula; }).join(', '));
-      }
-      insertarRegistros(HOJAS.ESTUDIANTES, nuevos);
-      registrarEnHistorial({
-        usuario: usuario.correo,
-        tipo_documento: 'IMPORTACION',
-        estatus_anterior: actuales.length + ' estudiantes',
-        estatus_nuevo: (actuales.length + nuevos.length) + ' estudiantes',
-        observacion: 'Importacion de lista de nuevo ingreso (' + nuevos.length + ' registros)'
-      });
-      return { ok: true, insertados: nuevos.length, errores: [] };
+      return guardarImportacion(proceso, validacion.filas, actualizarExistentes, usuario);
     });
 
     // Fuera del lock: crear carpetas en Drive es lento y no toca la hoja.
-    resultado.carpetas = crearCarpetasConContinuacion(nuevos, TIEMPO_CARPETAS_IMPORTACION_MS);
+    resultado.carpetas = crearCarpetasConContinuacion(resultado.habilitados.map(function (fila) {
+      return { matricula: fila.matricula, carrera: fila.carrera, grupo: proceso.nombre };
+    }), TIEMPO_CARPETAS_IMPORTACION_MS);
+    resultado.habilitados = resultado.habilitados.length;
     return resultado;
   });
+}
+
+/**
+ * Revisa cada fila del CSV contra si misma y contra los alumnos existentes.
+ * Devuelve { errores, filas } con las filas ya normalizadas.
+ */
+function validarFilasImportacion(filasCsv, existentes) {
+  const porMatricula = {};
+  const matriculaPorCorreo = {};
+  existentes.forEach(function (estudiante) {
+    const matricula = String(estudiante.matricula).trim().toLowerCase();
+    porMatricula[matricula] = estudiante;
+    matriculaPorCorreo[normalizarCorreo(estudiante.correo_institucional)] = matricula;
+  });
+
+  const errores = [];
+  const filas = [];
+  const matriculasCsv = {};
+  const correosCsv = {};
+  filasCsv.forEach(function (fila, indice) {
+    const numeroFila = indice + 2;
+    const registro = {
+      matricula: String(fila.matricula || '').trim(),
+      nombre: String(fila.nombre || '').trim(),
+      correo_institucional: normalizarCorreo(fila.correo_institucional),
+      correo_personal: normalizarCorreo(fila.correo_personal),
+      telefono: String(fila.telefono || '').trim(),
+      carrera: String(fila.carrera || '').trim(),
+      generacion: String(fila.generacion || '').trim()
+    };
+    const clave = registro.matricula.toLowerCase();
+    const agregarError = function (mensaje) { errores.push({ fila: numeroFila, mensaje: mensaje }); };
+
+    if (!registro.matricula) {
+      agregarError('matricula vacia');
+    } else if (matriculasCsv[clave]) {
+      agregarError('matricula repetida en el archivo: ' + registro.matricula);
+    }
+    if (!registro.nombre) {
+      agregarError('nombre vacio');
+    }
+    if (!registro.correo_institucional) {
+      agregarError('correo_institucional vacio');
+    } else if (!esCorreoValido(registro.correo_institucional)) {
+      agregarError('correo_institucional con formato invalido: ' + registro.correo_institucional);
+    } else if (!esCorreoEstudiante(registro.correo_institucional)) {
+      agregarError('correo_institucional fuera del dominio ' + DOMINIO_ESTUDIANTE + ': ' + registro.correo_institucional);
+    } else if (correosCsv[registro.correo_institucional]) {
+      agregarError('correo_institucional repetido en el archivo: ' + registro.correo_institucional);
+    } else if (matriculaPorCorreo[registro.correo_institucional] && matriculaPorCorreo[registro.correo_institucional] !== clave) {
+      agregarError('correo_institucional ya pertenece a otra matricula: ' + registro.correo_institucional);
+    }
+    if (registro.correo_personal && !esCorreoValido(registro.correo_personal)) {
+      agregarError('correo_personal con formato invalido: ' + registro.correo_personal);
+    }
+    if (registro.telefono && !/^[0-9+\-() ]{5,20}$/.test(registro.telefono)) {
+      agregarError('telefono invalido: ' + registro.telefono);
+    }
+    if (!registro.carrera) {
+      agregarError('carrera vacia');
+    }
+    if (!registro.generacion) {
+      agregarError('generacion vacia');
+    }
+
+    matriculasCsv[clave] = true;
+    correosCsv[registro.correo_institucional] = true;
+    registro.existente = porMatricula[clave] || null;
+    filas.push(registro);
+  });
+  return { errores: errores, filas: filas };
+}
+
+/**
+ * Escribe la importacion (requiere lock): altas, actualizaciones opcionales
+ * y habilitacion en el tramite. Relee la hoja del tramite para no duplicar
+ * si otra persona importo al mismo tiempo.
+ */
+function guardarImportacion(proceso, filas, actualizarExistentes, usuario) {
+  const yaHabilitados = {};
+  leerInscripcionesDeProceso(proceso.id_proceso).forEach(function (inscripcion) {
+    yaHabilitados[inscripcion.matricula.toLowerCase()] = true;
+  });
+  const existentesAhora = {};
+  leerHoja(HOJAS.ESTUDIANTES).forEach(function (estudiante) {
+    existentesAhora[String(estudiante.matricula).trim().toLowerCase()] = estudiante;
+  });
+
+  const nuevos = [];
+  const habilitados = [];
+  let actualizados = 0;
+  let conDiferencias = 0;
+  let omitidos = 0;
+  filas.forEach(function (fila) {
+    const clave = fila.matricula.toLowerCase();
+    if (yaHabilitados[clave]) {
+      omitidos++;
+      return;
+    }
+    const existente = existentesAhora[clave];
+    const datosAlumno = {
+      matricula: fila.matricula,
+      nombre: fila.nombre,
+      correo_institucional: fila.correo_institucional,
+      correo_personal: fila.correo_personal,
+      telefono: fila.telefono,
+      carrera: fila.carrera,
+      generacion: fila.generacion
+    };
+    if (!existente) {
+      nuevos.push(Object.assign({ estatus_general: '' }, datosAlumno));
+    } else {
+      const cambios = obtenerCambiosAlumno(existente, datosAlumno);
+      if (Object.keys(cambios).length) {
+        if (actualizarExistentes) {
+          actualizarRegistro(HOJAS.ESTUDIANTES, existente._fila, cambios);
+          actualizados++;
+        } else {
+          conDiferencias++;
+        }
+      }
+    }
+    yaHabilitados[clave] = true;
+    habilitados.push({
+      id_proceso: proceso.id_proceso,
+      matricula: fila.matricula,
+      carrera: fila.carrera,
+      generacion: fila.generacion,
+      estatus: ESTATUS_EXPEDIENTE.PENDIENTE,
+      fecha_alta: new Date()
+    });
+  });
+
+  insertarRegistros(HOJAS.ESTUDIANTES, nuevos);
+  insertarRegistros(HOJAS.ALUMNOS_PROCESO, habilitados);
+  registrarEnHistorial({
+    usuario: usuario.correo,
+    tipo_documento: 'IMPORTACION',
+    estatus_anterior: '-',
+    estatus_nuevo: habilitados.length + ' habilitados',
+    observacion: 'Importacion al tramite ' + proceso.nombre + ': ' + nuevos.length + ' alumnos nuevos, ' +
+      (habilitados.length - nuevos.length) + ' existentes, ' + actualizados + ' actualizados, ' + omitidos + ' ya habilitados'
+  });
+  return {
+    ok: true,
+    insertados: nuevos.length,
+    habilitados: habilitados,
+    existentes: habilitados.length - nuevos.length,
+    actualizados: actualizados,
+    conDiferencias: conDiferencias,
+    omitidos: omitidos,
+    errores: []
+  };
+}
+
+/**
+ * Columnas cuyo valor en el CSV difiere del registro del alumno. Un valor
+ * vacio en el CSV no borra el dato guardado.
+ */
+function obtenerCambiosAlumno(existente, datosAlumno) {
+  const cambios = {};
+  COLUMNAS_ACTUALIZABLES_IMPORTACION.forEach(function (columna) {
+    const nuevo = String(datosAlumno[columna] || '').trim();
+    const actual = String(existente[columna] === undefined || existente[columna] === null ? '' : existente[columna]).trim();
+    if (nuevo && nuevo.toLowerCase() !== actual.toLowerCase()) {
+      cambios[columna] = nuevo;
+    }
+  });
+  return cambios;
 }
 
 /* ------------------------------------------------------------------ */
@@ -281,8 +376,6 @@ function apiObtenerConfiguracion() {
     CLAVES_CONFIGURACION.forEach(function (clave) {
       configuracion[clave] = valores[clave] || CONFIGURACION_PREDETERMINADA[clave];
     });
-    // Se muestran los formatos que realmente se aplican, no los guardados en la hoja.
-    configuracion.TIPOS_PERMITIDOS = obtenerTiposPermitidos().join(',');
     return {
       ok: true,
       configuracion: configuracion,
@@ -352,8 +445,9 @@ function validarPlantillaCorreo(clave, valor) {
 }
 
 /**
- * Valida y guarda los parametros: tamano maximo, tipos permitidos y
- * generacion activa (RF-26). Solo el Administrador puede escribir.
+ * Valida y guarda los parametros: tamano maximo y generacion activa (RF-26).
+ * Los formatos permitidos los define cada documento del catalogo.
+ * Solo el Administrador puede escribir.
  */
 function apiGuardarConfiguracion(datos) {
   return protegerApi(function () {
@@ -371,21 +465,6 @@ function apiGuardarConfiguracion(datos) {
         RANGO_TAMANIO_ARCHIVO_MB.MINIMO + ' y ' + RANGO_TAMANIO_ARCHIVO_MB.MAXIMO + ' MB (RF-10).');
     }
 
-    const tipos = String(parametros.TIPOS_PERMITIDOS || '')
-      .split(',')
-      .map(function (tipo) { return tipo.trim().toUpperCase(); })
-      .filter(function (tipo) { return tipo !== ''; });
-    if (!tipos.length) {
-      throw crearError('VALIDACION', 'Debes indicar al menos un tipo de archivo permitido.');
-    }
-    const noPermitidos = tipos.filter(function (tipo) {
-      return FORMATOS_ARCHIVO.indexOf(tipo) === -1;
-    });
-    if (noPermitidos.length) {
-      throw crearError('VALIDACION', 'Formatos no permitidos: ' + noPermitidos.join(', ') +
-        '. Solo se aceptan ' + FORMATOS_ARCHIVO.join(', ') + '.');
-    }
-
     const generacion = String(parametros.GENERACION_ACTIVA || '').trim();
     if (!generacion || generacion.length > LONGITUD_MAXIMA_GENERACION || !/^[A-Za-z0-9\s\-/.]+$/.test(generacion)) {
       throw crearError('VALIDACION', 'La generacion activa es obligatoria (maximo 30 caracteres).');
@@ -393,7 +472,6 @@ function apiGuardarConfiguracion(datos) {
 
     const valores = {
       TAMANIO_MAXIMO_ARCHIVO_MB: tamano,
-      TIPOS_PERMITIDOS: tipos.join(','),
       GENERACION_ACTIVA: generacion
     };
 
@@ -404,7 +482,7 @@ function apiGuardarConfiguracion(datos) {
         tipo_documento: 'CONFIGURACION',
         estatus_anterior: '-',
         estatus_nuevo: 'Parametros actualizados',
-        observacion: 'Tamano ' + tamano + ' MB, tipos ' + tipos.join(',') + ', generacion ' + generacion
+        observacion: 'Tamano ' + tamano + ' MB, generacion ' + generacion
       });
       return { ok: true, configuracion: valores };
     });

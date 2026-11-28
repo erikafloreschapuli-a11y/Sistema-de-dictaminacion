@@ -6,18 +6,21 @@
  */
 
 /**
- * Devuelve el archivo de un documento en base64 para mostrarlo en el visor.
- * Estudiante: solo sus propios documentos. Dictaminador y Administrador:
- * cualquier matricula.
+ * Devuelve el archivo de un documento (por su id) en base64 para mostrarlo
+ * en el visor. Estudiante: solo sus propios documentos. Dictaminador y
+ * Administrador: cualquier matricula. El documento puede ser de otro
+ * tramite cuando se reutiliza.
  */
 function apiObtenerArchivo(datos) {
   return protegerApi(function () {
     const usuario = asegurarRol([ROLES.ESTUDIANTE, ROLES.DICTAMINADOR]);
-    const tipoDocumento = obtenerTipoDocumentoValido(datos && datos.tipoDocumento);
+    const idDocumento = String((datos && datos.idDocumento) || '').trim();
     const estudiante = obtenerEstudianteParaVerArchivo(usuario, datos && datos.matricula);
-    const documento = buscarDocumentoDeEstudiante(estudiante.matricula, tipoDocumento);
-    if (!documento || !documento.url_archivo) {
-      throw crearError('VALIDACION', 'El documento ' + tipoDocumento + ' aún no tiene archivo cargado.');
+    const documento = leerDocumentosDeEstudiante(estudiante.matricula).find(function (fila) {
+      return String(fila.id_documento || '').trim() === idDocumento;
+    });
+    if (!idDocumento || !documento || !documento.url_archivo) {
+      throw crearError('VALIDACION', 'El documento aún no tiene archivo cargado.');
     }
 
     const archivo = abrirArchivoDrive(documento.url_archivo);

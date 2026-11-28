@@ -19,10 +19,10 @@ if (window.pdfjsLib) {
 // mostrar un archivo viejo si el estudiante lo reemplazo.
 const archivosDescargados = {};
 
-function obtenerArchivoDocumento(matricula, tipoDocumento, version) {
-  const clave = [matricula, tipoDocumento, version].join('|');
+function obtenerArchivoDocumento(matricula, idDocumento, version) {
+  const clave = [matricula, idDocumento, version].join('|');
   if (!archivosDescargados[clave]) {
-    archivosDescargados[clave] = api('apiObtenerArchivo', { matricula: matricula, tipoDocumento: tipoDocumento })
+    archivosDescargados[clave] = api('apiObtenerArchivo', { matricula: matricula, idDocumento: idDocumento })
       .catch(function (error) {
         delete archivosDescargados[clave];
         throw error;
@@ -42,7 +42,7 @@ function convertirBase64ABytes(base64) {
 
 /**
  * Dibuja el visor dentro del contenedor.
- * opciones: { matricula, tipoDocumento, version }
+ * opciones: { matricula, idDocumento, version }
  */
 async function mostrarVisor(contenedor, opciones) {
   const turno = {};
@@ -51,7 +51,7 @@ async function mostrarVisor(contenedor, opciones) {
 
   let archivo;
   try {
-    archivo = await obtenerArchivoDocumento(opciones.matricula, opciones.tipoDocumento, opciones.version);
+    archivo = await obtenerArchivoDocumento(opciones.matricula, opciones.idDocumento, opciones.version);
   } catch (error) {
     if (contenedor.turnoVisor === turno) {
       contenedor.innerHTML = '<div class="visor"><div class="visor-mensaje">' + escapeHtml(error.message) + '</div></div>';

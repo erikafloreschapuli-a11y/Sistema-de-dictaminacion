@@ -47,7 +47,7 @@ function notificarDocumentosPendientes(estudiante, expediente) {
   }).map(function (documento) {
     return documento.tipo_documento;
   });
-  const valores = construirValoresPlantilla(estudiante, { faltantes: unirConY(faltantes) });
+  const valores = construirValoresPlantilla(estudiante, { faltantes: unirConY(faltantes) }, expediente);
   return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_PENDIENTE', 'PLANTILLA_CORREO_PENDIENTE', valores, {
     aviso: AVISOS_CORREO.PENDIENTE,
     expediente: expediente,
@@ -60,7 +60,7 @@ function notificarDocumentosPendientes(estudiante, expediente) {
  * Devuelve { enviado, motivo }.
  */
 function notificarDocumentoRecibido(estudiante, expediente, tipoDocumento) {
-  const valores = construirValoresPlantilla(estudiante, { documento: tipoDocumento });
+  const valores = construirValoresPlantilla(estudiante, { documento: tipoDocumento }, expediente);
   return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_RECIBIDO', 'PLANTILLA_CORREO_RECIBIDO', valores, {
     aviso: AVISOS_CORREO.RECIBIDO,
     expediente: expediente,
@@ -87,7 +87,7 @@ function notificarDocumentoObservado(estudiante, expediente, tipoDocumento, obse
     documento: tipoDocumento,
     observacion: observacion,
     dictaminador: usuario && usuario.correo ? usuario.correo : NOMBRE_REMITENTE_CORREO
-  });
+  }, expediente);
   return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_OBSERVADO', 'PLANTILLA_CORREO_OBSERVADO', valores, {
     aviso: AVISOS_CORREO.OBSERVADO,
     expediente: expediente,
@@ -103,7 +103,7 @@ function notificarDocumentoObservado(estudiante, expediente, tipoDocumento, obse
  * Devuelve { enviado, motivo }.
  */
 function notificarExpedienteCompleto(estudiante, expediente) {
-  const valores = construirValoresPlantilla(estudiante, {});
+  const valores = construirValoresPlantilla(estudiante, {}, expediente);
   return enviarCorreoConPlantilla(estudiante, 'ASUNTO_CORREO_COMPLETO', 'PLANTILLA_CORREO_COMPLETO', valores, {
     aviso: AVISOS_CORREO.COMPLETO,
     expediente: expediente,
@@ -114,11 +114,12 @@ function notificarExpedienteCompleto(estudiante, expediente) {
 /**
  * Reune los datos del estudiante que pueden usarse como marcadores.
  */
-function construirValoresPlantilla(estudiante, adicionales) {
+function construirValoresPlantilla(estudiante, adicionales, expediente) {
+  const generacion = (expediente && expediente.generacion) || estudiante.generacion || obtenerValorConfiguracion('GENERACION_ACTIVA');
   return Object.assign({
     nombre: String(estudiante.nombre || 'estudiante').trim(),
     matricula: String(estudiante.matricula || '').trim(),
-    generacion: String(estudiante.generacion || obtenerValorConfiguracion('GENERACION_ACTIVA') || '').trim()
+    generacion: String(generacion || '').trim()
   }, adicionales);
 }
 
@@ -160,6 +161,10 @@ function construirCorreoHtml(estudiante, cuerpo, generacion, formato) {
     plantilla.colorTitulo = formato.aviso.color;
     plantilla.area = AREA_CORREO;
     plantilla.generacion = generacion;
+    // Titulacion, nuevo ingreso...: el correo nombra el tramite del expediente.
+    plantilla.subtitulo = formato.expediente && formato.expediente.nombre_proceso
+      ? formato.expediente.nombre_proceso
+      : 'Expediente de nuevo ingreso ' + generacion;
     plantilla.estudiante = {
       nombre: String(estudiante.nombre || ''),
       matricula: String(estudiante.matricula || ''),

@@ -94,6 +94,23 @@
 .dato-etiqueta { margin: 0; font-size: 12px; color: var(--texto-suave); }
 .dato-valor { margin: 2px 0 0; font-weight: 600; word-break: break-word; }
 
+/* Tramites del alumno */
+.selector-procesos { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.proceso-pestana {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 10px 14px; border: 1px solid var(--borde); border-radius: var(--radio);
+  background: var(--superficie); color: var(--texto); cursor: pointer; font: inherit; text-align: left;
+}
+.proceso-pestana span { font-size: 12px; color: var(--texto-suave); }
+.proceso-pestana.activo { border-color: var(--verde-700); background: var(--verde-50); box-shadow: inset 0 0 0 1px var(--verde-700); }
+.bienvenida-proceso { margin: 0 0 6px; font-weight: 600; color: var(--verde-800); }
+.documento-aviso { margin: 6px 0; font-size: 13px; color: var(--texto-suave); }
+.campo-emision { margin-bottom: 10px; }
+.campo-emision input { max-width: 220px; }
+.sin-tramites { display: flex; gap: 14px; align-items: center; grid-column: 1 / -1; }
+.sin-tramites svg { width: 32px; height: 32px; flex: none; color: var(--verde-700); }
+.sin-tramites p { margin: 0; }
+
 @media (max-width: 640px) {
   .bienvenida { grid-template-columns: 1fr; }
   .bienvenida-estatus { text-align: left; }
